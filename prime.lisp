@@ -65,3 +65,38 @@
             (float (length times) 1.0d0))))
 
 
+(defun make-prime-generator()
+    (let ((primes ())
+            (cursor 1))
+        (lambda()
+            (loop until
+                (progn
+                    (incf cursor)
+                    (loop for i in primes
+                        while (<= i (isqrt cursor))
+                        never (zerop (mod cursor i)))))
+            (setf primes (nconc primes (list cursor)))
+            cursor)))
+
+(defparameter *primes* (make-prime-generator))
+(funcall *primes*)
+(defmacro do-primes-n ((var count) &body body)
+    (with-gensyms(counter prime-generator)
+        `(let ((,prime-generator (make-prime-generator)))
+            (dotimes (,counter ,count)
+                (let ((,var (funcall ,prime-generator)))
+                    ,@body)))))
+
+(defmacro with-gensyms(symbols &body body)
+    `(let ,(loop for sym in symbols collect `(,sym (gensym)))
+        ,@body))
+
+(with-gensyms(a b c)
+    (list a b c))
+
+(do-primes-n (n 10)
+    (print n))
+
+(macroexpand-1
+    '(do-primes-n (n 3)
+        (print n)))
