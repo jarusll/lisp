@@ -105,9 +105,28 @@
 (cffi:defcfun ("IsKeyPressed" is-key-pressed) :bool
     (key :int))
 
-
-; float GetMouseWheelMove(void);
+; float GetMouseWheelMove(void) // Get mouse wheel movement for X or Y, whichever is larger
 (cffi:defcfun ("GetMouseWheelMove" get-mouse-wheel-move) :float)
+
+; float GetFrameTime(void) // Get time in seconds for last frame drawn (delta time)
+(cffi:defcfun ("GetFrameTime" get-frame-time) :float)
+
+; int GetFPS(void) // Get current FPS
+(cffi:defcfun ("GetFPS" get-fps) :int)
+
+; void DrawFPS(int posX, int posY) // Draw current FPS
+(cffi:defcfun ("DrawFPS" draw-fps) :void
+    (posX :int)
+    (posY :int))
+
+; void DrawText(const char *text, int posX, int posY, int fontSize, Color color) // Draw text (using default font)
+(cffi:defcfun ("DrawText" draw-text) :void
+    (text (:string))
+    (posX :int)
+    (posY :int)
+    (fontSize :int)
+    (color (:struct %color)))
+
 
 (defun keyboard-key(key)
     (ecase key
@@ -222,8 +241,8 @@
     (:volume_up        24)
     (:volume_down      25)))
 
-(defparameter *points* ())
-(defparameter *primes* ())
+(defparameter *points* (make-array 1000000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
+(defparameter *primes* (make-array 1000000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
 (defparameter *cursor* 0)
 (defparameter *sensitivity* 100)
 
@@ -261,40 +280,50 @@
             (t value)))
 
 (defparameter *screen-width* 1900)
-(defparameter *screen-height* 600)
+(defparameter *screen-height* 1000)
 
 
 (defun push-prime(p)
-    (setf *primes* (nconc *primes* (list p))))
+    (vector-push-extend p *primes*))
 
-(let ((x 1)
-    (gen (make-prime-generator)))
+(defun main()
+    (let ((x 1)
+        (gen (make-prime-generator)))
+        (setf *points* (make-array 1000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
+        (setf *primes* (make-array 1000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
+        (setf *cursor* 0)
+        (dotimes (_ 1000)
+            (let ((p (funcall gen)))
+                (push-prime p)
+                (incf x)))
+        (init-window *screen-width* *screen-height* "Primes!!!")
+        (set-target-fps 60)
+        (loop until (window-should-close)
+            doing
+            (begin-drawing)
+            (setf *cursor* (clamp (round (+
+                                    (* *sensitivity* (get-mouse-wheel-move))
+                                    *cursor*))
+                                0
+                                ( - (max (length *primes*) *screen-width*) (min (length *primes*) *screen-width*))))
+            (if (or (>= (+ *cursor* *screen-width*) (length *primes*))
+                    (< (length *primes*) *screen-width*))
+                (progn
+                    (print "Fetching")
+                    (dotimes(_ 5000)
+                        (push-prime (funcall gen)))))
+            (clear-background (make-color :r 255 :g 255 :b 0 :a 255))
+            (draw-fps 0 0)
+            (loop for i from *cursor* below (min (+ *cursor* *screen-width*) (length *primes*))
+                for prime = (elt *primes* i)
+                doing
+                (draw-text (princ-to-string (length *primes*)) 1800 15 20 (make-color :r 0 :g 255 :b 0 :a 255))
+                (draw-circle
+                    (- i *cursor*)
+                    (flip-y-axis (normalize-to-screen-height prime (elt *primes* (1- (length *primes*)))))
+                    1.0
+                    (make-color :r 255 :g 0 :b 0 :a 255)))
+            (end-drawing))
+        (close-window)))
 
-    (setf *points* ())
-    (setf *primes* ())
-    (setf *cursor* 0)
-
-    (dotimes (_ 2000)
-        (let ((p (funcall gen)))
-            (push-prime p)
-            (incf x)))
-
-    (init-window *screen-width* *screen-height* "Primes!!!")
-    (set-target-fps 24)
-    (loop until (window-should-close)
-        doing
-        (begin-drawing)
-        (setf *cursor* (clamp (round (+ (* *sensitivity* (get-mouse-wheel-move)) *cursor*)) 0 ( - (length *primes*) *screen-width*)))
-        (if (>= (+ *cursor* *screen-width*) (length *primes*))
-            (dotimes(_ 100)
-                (push-prime (funcall gen))))
-        (clear-background (make-color :r 255 :g 255 :b 0 :a 255))
-        (loop for i from 0 for prime in (subseq *primes* *cursor* (min (+ *cursor* *screen-width*) (length *primes*))) doing
-            (draw-circle
-                i
-                (flip-y-axis (normalize-to-screen-height prime (car (last *primes*))))
-                1.0
-                (make-color :r 255 :g 0 :b 0 :a 255)))
-        (end-drawing))
-    (close-window))
-
+(main)
