@@ -246,21 +246,41 @@
 (defparameter *cursor* 0)
 (defparameter *sensitivity* 100)
 
+(setq primes (make-array 10000 :fill-pointer 0 :adjustable t :element-type 'fixnum)
+    cursor 1)
+(prime-add 2)
+(prime-next)
+
 (defun make-prime-generator()
-    (let ((primes ())
-            (cursor 1))
-        (lambda()
-            (loop until
-                (progn
-                    (incf cursor)
-                    (loop for i in primes
-                        while (<= i (isqrt cursor))
-                        never (zerop (mod cursor i)))))
-            (setf primes (nconc primes (list cursor)))
-            cursor)))
+    (let ((primes (make-array 10000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
+            (cursor 1)
+            (increments 1))
+        (labels ((prime-add(p)
+                    (vector-push-extend p primes)
+                    p)
+                    (prime-next()
+                        (loop
+                            do (incf cursor 1)
+                            when (loop for i across primes
+                                    with root = (isqrt cursor)
+                                    while (<= i root)
+                                    never (zerop (mod cursor i)))
+                                return (prime-add cursor)))
+
+                    (prime-nth(n)
+                        (loop until (<= n (length primes))
+                                doing
+                                (prime-next))
+                        (aref primes (1- n))))
+            (lambda (&optional n)
+                (cond ((and n (<= n (length primes))) (aref primes (1- n)))
+                    (n (prime-nth n))
+                    (t (prime-next)))))))
+
 (defmacro with-gensyms(symbols &body body)
     `(let ,(loop for sym in symbols collect `(,sym (gensym)))
         ,@body))
+
 (defmacro do-primes-n ((var count) &body body)
     (with-gensyms(counter prime-generator)
         `(let ((,prime-generator (make-prime-generator)))
@@ -292,7 +312,7 @@
         (setf *points* (make-array 1000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
         (setf *primes* (make-array 1000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
         (setf *cursor* 0)
-        (dotimes (_ 1000)
+        (dotimes (_ 2000)
             (let ((p (funcall gen)))
                 (push-prime p)
                 (incf x)))
@@ -310,7 +330,7 @@
                     (< (length *primes*) *screen-width*))
                 (progn
                     (print "Fetching")
-                    (dotimes(_ 5000)
+                    (dotimes(_ 500)
                         (push-prime (funcall gen)))))
             (clear-background (make-color :r 255 :g 255 :b 0 :a 255))
             (draw-fps 0 0)
@@ -327,3 +347,9 @@
         (close-window)))
 
 (main)
+
+(let ((gen (make-prime-generator))
+        (p nil))
+    (dotimes (_ 7)
+        (setq p (funcall gen)))
+    p)
