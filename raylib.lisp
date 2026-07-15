@@ -26,6 +26,68 @@
 (defstruct color
     r g b a)
 
+; typedef struct Vector2 {
+;     float x;                // Vector x component
+;     float y;                // Vector y component
+; } Vector2;
+
+(cffi:defcstruct (%vector2 :class vector2-type)
+    (x :float)
+    (y :float))
+
+(defstruct vector2
+    x y)
+
+; typedef struct Vector3 {
+;     float x;                // Vector x component
+;     float y;                // Vector y component
+;     float z;                // Vector z component
+; } Vector3;
+
+(cffi:defcstruct (%vector3 :class vector3-type)
+    (x :float)
+    (y :float)
+    (z :float))
+
+(defstruct vector3
+    x y z)
+
+; typedef struct Vector4 {
+;     float x;                // Vector x component
+;     float y;                // Vector y component
+;     float z;                // Vector z component
+;     float w;                // Vector w component
+; } Vector4;
+
+(cffi:defcstruct (%vector4 :class vector4-type)
+    (x :float)
+    (y :float)
+    (z :float)
+    (w :float))
+
+(defstruct vector4
+    x y z w)
+
+; Camera2D, defines position/orientation in 2d space
+; typedef struct Camera2D {
+;     Vector2 offset // Camera offset (screen space offset from window origin)
+;     Vector2 target // Camera target (world space target point that is mapped to screen space offset)
+;     float rotation // Camera rotation in degrees (pivots around target)
+;     float zoom // Camera zoom (scaling around target), must not be set to 0, set to 1.0f for no scale
+; } Camera2D;
+
+(cffi:defcstruct (%camera-2d :class camera-2d-type)
+    (offset (:struct %vector2))
+    (target (:struct %vector2))
+    (rotation :float)
+    (zoom :float))
+
+(defstruct camera-2d
+    offset target rotation zoom)
+
+(make-camera-2d :offset '(1 2) :target '(100 200) :rotation 0.0 :zoom 1.0)
+(make-camera-2d :offset (make-vector2 :x 1 :y 2) :target (make-vector2 :x 100 :y 200) :rotation 0.0 :zoom 1.0)
+
 ; #define LIGHTGRAY  (Color){ 200, 200, 200, 255 }   // Light Gray
 ; #define GRAY       (Color){ 130, 130, 130, 255 }   // Gray
 ; #define DARKGRAY   (Color){ 80, 80, 80, 255 }      // Dark Gray
@@ -61,6 +123,70 @@
                 g (color-g value)
                 b (color-b value)
                 a (color-a value))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value list) (type color-type) pointer)
+    (cffi:with-foreign-slots ((r g b a) pointer (:struct %color))
+        (setf r (first value)
+                g (second value)
+                b (third value)
+                a (fourth value))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value vector2) (type vector2-type) pointer)
+    (cffi:with-foreign-slots ((x y) pointer (:struct %vector2))
+        (setf x (coerce (vector2-x value) 'float)
+                y (coerce (vector2-y value) 'float))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value list) (type vector2-type) pointer)
+    (cffi:with-foreign-slots ((x y) pointer (:struct %vector2))
+        (setf x (coerce (first value) 'float)
+                y (coerce  (second value) 'float))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value vector3) (type vector3-type) pointer)
+    (cffi:with-foreign-slots ((x y z) pointer (:struct %vector3))
+        (setf x (vector3-x value)
+                y (vector3-y value)
+                z (vector3-z value))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value list) (type vector3-type) pointer)
+    (cffi:with-foreign-slots ((x y z) pointer (:struct %vector3))
+        (setf x (first value)
+                y (second value)
+                z (third value))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value vector4) (type vector4-type) pointer)
+    (cffi:with-foreign-slots ((x y z w) pointer (:struct %vector4))
+        (setf x (vector4-x value)
+                y (vector4-y value)
+                z (vector4-z value)
+                w (vector4-w value))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value list) (type vector4-type) pointer)
+    (cffi:with-foreign-slots ((x y z w) pointer (:struct %vector4))
+        (setf x (first value)
+                y (second value)
+                z (third value)
+                w (fourth value))))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value camera-2d) (type camera-2d-type) pointer)
+    (cffi:with-foreign-slots ((offset target rotation zoom) pointer (:struct %camera-2d))
+        (cffi:translate-into-foreign-memory
+            (camera-2d-offset value)
+            (cffi::parse-type '(:struct %vector2))
+            (cffi:foreign-slot-pointer pointer '(:struct %camera-2d) 'offset))
+        (cffi:translate-into-foreign-memory
+            (camera-2d-target value)
+            (cffi::parse-type '(:struct %vector2))
+            (cffi:foreign-slot-pointer pointer '(:struct %camera-2d) 'target))
+        (setf rotation (camera-2d-rotation value)
+                zoom (camera-2d-zoom value))))
 
 ; void InitWindow(int width, int height, const char *title) - Initialize window and OpenGL context
 (cffi:defcfun ("InitWindow" init-window) :void
@@ -127,6 +253,12 @@
     (fontSize :int)
     (color (:struct %color)))
 
+; void BeginMode2D(Camera2D camera) // Begin 2D mode with custom camera (2D)
+(cffi:defcfun ("BeginMode2D" begin-mode-2d) :void
+    (camera (:struct %camera-2d)))
+
+; void EndMode2D(void) // Ends 2D mode with custom camera
+(cffi:defcfun ("EndMode2D" end-mode-2d) :void)
 
 (defun keyboard-key(key)
     (ecase key
@@ -302,8 +434,8 @@
             ((> value max) max)
             (t value)))
 
-(defparameter *screen-width* 1900)
-(defparameter *screen-height* 1000)
+(defparameter *screen-width* 800)
+(defparameter *screen-height* 600)
 
 
 (defun push-prime(p)
@@ -352,9 +484,28 @@
 (main)
 
 (let ((gen (make-prime-generator)))
-    (dotimes (_ 10000)
-        (funcall gen))
     (sb-ext:gc :full t)
     (let ((sb-ext:*gc-run-time* 0))
         (time (funcall gen 10000000))
     ))
+
+(let ((camera (make-camera-2d :offset (make-vector2 :x 0 :y *screen-height*) :target (make-vector2 :x 0 :y 0) :rotation 0.0 :zoom 1.0)))
+    (init-window *screen-width* *screen-height* "Primes!!!")
+    (set-target-fps 60)
+    (loop until (window-should-close)
+        doing
+        (cond ((is-key-pressed (keyboard-key :right)) (decf (vector2-x (camera-2d-target camera)) 10))
+                ((is-key-pressed (keyboard-key :left)) (incf (vector2-x (camera-2d-target camera)) 10))
+                ((is-key-pressed (keyboard-key :up)) (incf (vector2-y (camera-2d-target camera)) 10))
+                ((is-key-pressed (keyboard-key :down)) (decf (vector2-y (camera-2d-target camera)) 10)))
+        (begin-drawing)
+            (clear-background '(255 255 0 255))
+            (begin-mode-2d camera)
+                (draw-circle 100 -100 100.0 '(255 0 0 255))
+            (end-mode-2d)
+            (draw-fps 0 0)
+        (end-drawing))
+    (close-window))
+
+(describe 'cffi:translate-into-foreign-memory)
+(cffi::parse-type '(:struct %vector2))
