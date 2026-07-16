@@ -261,6 +261,90 @@
     (fontSize :int)
     (color (:struct %color)))
 
+; typedef struct Matrix {
+;     float m0, m4, m8, m12;  // Matrix first row (4 components)
+;     float m1, m5, m9, m13;  // Matrix second row (4 components)
+;     float m2, m6, m10, m14; // Matrix third row (4 components)
+;     float m3, m7, m11, m15; // Matrix fourth row (4 components)
+; } Matrix;
+
+(cffi:defcstruct (%matrix :class matrix-type)
+        (m0 :float)
+        (m4 :float)
+        (m8 :float)
+        (m12 :float)
+        (m1 :float)
+        (m5 :float)
+        (m9 :float)
+        (m13 :float)
+        (m2 :float)
+        (m6 :float)
+        (m10 :float)
+        (m14 :float)
+        (m3 :float)
+        (m7 :float)
+        (m11 :float)
+        (m15 :float))
+
+(defstruct matrix
+        m0 m4 m8 m12
+        m1 m5 m9 m13
+        m2 m6 m10 m14
+        m3 m7 m11 m15)
+
+(defmethod cffi:translate-into-foreign-memory
+        ((value matrix) (type matrix-type) pointer)
+    (cffi:with-foreign-slots ((m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) pointer (:struct %matrix))
+        (setf m0 (matrix-m0 value)
+                    m4 (matrix-m4 value)
+                    m8 (matrix-m8 value)
+                    m12 (matrix-m12 value)
+                    m1 (matrix-m1 value)
+                    m5 (matrix-m5 value)
+                    m9 (matrix-m9 value)
+                    m13 (matrix-m13 value)
+                    m2 (matrix-m2 value)
+                    m6 (matrix-m6 value)
+                    m10 (matrix-m10 value)
+                    m14 (matrix-m14 value)
+                    m3 (matrix-m3 value)
+                    m7 (matrix-m7 value)
+                    m11 (matrix-m11 value)
+                    m15 (matrix-m15 value))))
+
+(defmethod cffi:translate-into-foreign-memory
+        ((value list) (type matrix-type) pointer)
+    "Accept a list of 4 rows (each a list of 4 floats) and write into C Matrix layout."
+    (let ((r0 (first value)) (r1 (second value)) (r2 (third value)) (r3 (fourth value)))
+        (cffi:with-foreign-slots ((m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) pointer (:struct %matrix))
+            (setf m0 (coerce (nth 0 r0) 'float)
+                        m4 (coerce (nth 1 r0) 'float)
+                        m8 (coerce (nth 2 r0) 'float)
+                        m12 (coerce (nth 3 r0) 'float)
+
+                        m1 (coerce (nth 0 r1) 'float)
+                        m5 (coerce (nth 1 r1) 'float)
+                        m9 (coerce (nth 2 r1) 'float)
+                        m13 (coerce (nth 3 r1) 'float)
+
+                        m2 (coerce (nth 0 r2) 'float)
+                        m6 (coerce (nth 1 r2) 'float)
+                        m10 (coerce (nth 2 r2) 'float)
+                        m14 (coerce (nth 3 r2) 'float)
+
+                        m3 (coerce (nth 0 r3) 'float)
+                        m7 (coerce (nth 1 r3) 'float)
+                        m11 (coerce (nth 2 r3) 'float)
+                        m15 (coerce (nth 3 r3) 'float)))))
+
+(defmethod cffi:translate-from-foreign (ptr (type matrix-type))
+    (cffi:with-foreign-slots ((m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) ptr (:struct %matrix))
+        (make-matrix :m0 m0 :m4 m4 :m8 m8 :m12 m12
+                        :m1 m1 :m5 m5 :m9 m9 :m13 m13
+                        :m2 m2 :m6 m6 :m10 m10 :m14 m14
+                        :m3 m3 :m7 m7 :m11 m11 :m15 m15)))
+
+
 ; void BeginMode2D(Camera2D camera) // Begin 2D mode with custom camera (2D)
 (cffi:defcfun ("BeginMode2D" begin-mode-2d) :void
     (camera (:struct %camera-2d)))
