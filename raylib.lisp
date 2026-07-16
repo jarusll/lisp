@@ -144,6 +144,10 @@
         (setf x (coerce (first value) 'float)
                 y (coerce  (second value) 'float))))
 
+(defmethod cffi:translate-from-foreign (ptr (type vector2-type))
+    (cffi:with-foreign-slots ((x y) ptr (:struct %vector2))
+        (make-vector2 :x x :y y)))
+
 (defmethod cffi:translate-into-foreign-memory
     ((value vector3) (type vector3-type) pointer)
     (cffi:with-foreign-slots ((x y z) pointer (:struct %vector3))
@@ -231,6 +235,10 @@
 (cffi:defcfun ("IsKeyPressed" is-key-pressed) :bool
     (key :int))
 
+; bool IsKeyDown(int key) // Check if a key is being pressed
+(cffi:defcfun ("IsKeyDown" is-key-down) :bool
+    (key :int))
+
 ; float GetMouseWheelMove(void) // Get mouse wheel movement for X or Y, whichever is larger
 (cffi:defcfun ("GetMouseWheelMove" get-mouse-wheel-move) :float)
 
@@ -259,6 +267,30 @@
 
 ; void EndMode2D(void) // Ends 2D mode with custom camera
 (cffi:defcfun ("EndMode2D" end-mode-2d) :void)
+
+; bool IsMouseButtonPressed(int button) // Check if a mouse button has been pressed once
+(cffi:defcfun ("IsMouseButtonPressed" is-mouse-button-pressed) :bool
+    (button :int))
+
+; bool IsMouseButtonDown(int button) // Check if a mouse button is being pressed
+(cffi:defcfun ("IsMouseButtonDown" is-mouse-button-down) :bool
+    (button :int))
+
+; bool IsMouseButtonReleased(int button) // Check if a mouse button has been released once
+(cffi:defcfun ("IsMouseButtonReleased" is-mouse-button-released) :bool
+    (button :int))
+
+; bool IsMouseButtonUp(int button) // Check if a mouse button is NOT being pressed
+(cffi:defcfun ("IsMouseButtonUp" is-mouse-button-up) :bool
+    (button :int))
+
+; Vector2 GetMouseDelta(void) // Get mouse delta between frames
+(cffi:defcfun ("GetMouseDelta" get-mouse-delta) (:struct %vector2))
+
+; Vector2 GetScreenToWorld2D(Vector2 position, Camera2D camera) // Get the world space position for a 2d camera screen space position
+(cffi:defcfun ("GetScreenToWorld2D" get-screen-to-world-2d) (:struct %vector2)
+    (position (:struct %vector2))
+    (camera (:struct %camera-2d)))
 
 (defun keyboard-key(key)
     (ecase key
@@ -372,6 +404,16 @@
     (:menu             5)
     (:volume_up        24)
     (:volume_down      25)))
+
+(defun mouse-key(key)
+    (ecase key
+        (:left     0)
+        (:right    1)
+        (:middle   2)
+        (:side     3)
+        (:extra    4)
+        (:forward  5)
+        (:back     6)))
 
 (defparameter *points* (make-array 1000000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
 (defparameter *primes* (make-array 1000000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
@@ -489,23 +531,49 @@
         (time (funcall gen 10000000))
     ))
 
-(let ((camera (make-camera-2d :offset (make-vector2 :x 0 :y *screen-height*) :target (make-vector2 :x 0 :y 0) :rotation 0.0 :zoom 1.0)))
+(let ((camera (make-camera-2d
+                    :offset (make-vector2 :x 0 :y *screen-height*)
+                    :target (make-vector2 :x 0 :y 0)
+                    :rotation 0.0
+                    :zoom 1.0))
+        (is-dragging nil)
+        (delta nil)
+        (prime-generator (make-prime-generator))
+        (world-bounds-x (make-vector2 :x 0 :y *screen-width*)))
     (init-window *screen-width* *screen-height* "Primes!!!")
     (set-target-fps 60)
     (loop until (window-should-close)
         doing
-        (cond ((is-key-pressed (keyboard-key :right)) (decf (vector2-x (camera-2d-target camera)) 10))
-                ((is-key-pressed (keyboard-key :left)) (incf (vector2-x (camera-2d-target camera)) 10))
-                ((is-key-pressed (keyboard-key :up)) (incf (vector2-y (camera-2d-target camera)) 10))
-                ((is-key-pressed (keyboard-key :down)) (decf (vector2-y (camera-2d-target camera)) 10)))
+        (setf delta (get-mouse-wheel-move))
+        (let ((screen-from-world-left (get-screen-to-world-2d (list 0 0) camera))
+                (screen-from-world-right (get-screen-to-world-2d (list *screen-width* 0) camera)))
+            (setf (vector2-x world-bounds-x) (vector2-x screen-from-world-left)
+                    (vector2-y world-bounds-x) (vector2-x screen-from-world-right)))
+        ; (print world-bounds-x)
+        ; (funcall prime-generator world-bounds)
+        (cond ((is-key-down (keyboard-key :right)) (decf (vector2-x (camera-2d-target camera)) 10))
+                ((is-key-down (keyboard-key :left)) (incf (vector2-x (camera-2d-target camera)) 10))
+                ((is-key-down (keyboard-key :up)) (incf (vector2-y (camera-2d-target camera)) 10))
+                ((is-key-down (keyboard-key :down)) (decf (vector2-y (camera-2d-target camera)) 10))
+                ((is-key-pressed (keyboard-key :minus)) (decf (camera-2d-zoom camera) 0.1))
+                ((is-key-pressed (keyboard-key :equal)) (incf (camera-2d-zoom camera) 0.1))
+                ((is-mouse-button-pressed (mouse-key :left)) (setf is-dragging t))
+                ((is-mouse-button-released (mouse-key :left)) (setf is-dragging nil))
+                ((not (zerop delta)) (incf (camera-2d-zoom camera) (* delta 0.1)))
+                (is-dragging (setf delta (get-mouse-delta))
+                                (decf (vector2-x (camera-2d-target camera)) (vector2-x delta))
+                                (decf (vector2-y (camera-2d-target camera)) (vector2-y delta)))
+                )
         (begin-drawing)
             (clear-background '(255 255 0 255))
             (begin-mode-2d camera)
                 (draw-circle 100 -100 100.0 '(255 0 0 255))
+                (loop for i from 1 to (vector2-y world-bounds-x)
+                    doing
+                    (draw-circle i (- (funcall prime-generator i)) 5.0 '(0 0 255 255))
+                )
             (end-mode-2d)
             (draw-fps 0 0)
         (end-drawing))
     (close-window))
 
-(describe 'cffi:translate-into-foreign-memory)
-(cffi::parse-type '(:struct %vector2))
