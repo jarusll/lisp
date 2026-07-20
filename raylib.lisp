@@ -736,19 +736,5 @@
 (pairlis '(a b c) '(1 2 3))
 (pairlis '(a b c) '(1 2 3))
 
-(defmacro with-members ((type members object) &body body)
-    (let ((obj (gensym "OBJECT")))
-        `(let ((,obj ,object))
-        (let ,(loop for member in members
-                    collect
-                    `(,member
-                        (,(intern (format nil "~A-~A" type member)
-                                (symbol-package type))
-                        ,obj)))
-            ,@body))))
-
-(with-members(color (r g b a) (make-color :r 1 :g 2 :b 3 :a 4))
-    (print r)
-    (print g)
-    (print b)
-    (print a))
+(with-members((r g b a) color (make-color :r 1 :g 2 :b 3 :a 4))
+    (list r g b a))

@@ -818,7 +818,7 @@
         `(let ((,obj-var ,obj))
             (symbol-macrolet
                 ,(loop for member in members
-                    for accessor = (format nil "~a-~a" type member obj-var)
+                    for accessor = (format nil "~a-~a" type member)
                     collecting `(,member (,(intern accessor (symbol-package type)) ,obj-var)))
                 ,@body))))
 
