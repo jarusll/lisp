@@ -17,7 +17,7 @@
 ;     unsigned char a;        // Color alpha value
 ; } Color;
 
-(cffi:defcstruct (%color :class color-type)
+(cffi:defcstruct (%Color :class color-type)
     (r :unsigned-char)
     (g :unsigned-char)
     (b :unsigned-char)
@@ -158,9 +158,10 @@
 (defmethod cffi:translate-into-foreign-memory
     ((value list) (type vector3-type) pointer)
     (cffi:with-foreign-slots ((x y z) pointer (:struct %vector3))
-        (setf x (first value)
-                y (second value)
-                z (third value))))
+        (destructuring-bind (a b c) value
+            (setf x a
+                    y b
+                    z c))))
 
 (defmethod cffi:translate-into-foreign-memory
     ((value vector4) (type vector4-type) pointer)
@@ -225,10 +226,27 @@
     (radius :float)
     (color (:struct %color)))
 
+; void DrawCircleV(Vector2 center, float radius, Color color) // Draw a color-filled circle (Vector version)
+(cffi:defcfun ("DrawCircleV" draw-circle-v) :void
+    (center (:struct %vector2))
+    (radius :float)
+    (color (:struct %color)))
+
+; void DrawLineV(Vector2 startPos, Vector2 endPos, Color color) // Draw a line (using gl lines)
+(cffi:defcfun ("DrawLineV" draw-line-v) :void
+    (startPos (:struct %vector2))
+    (endPos (:struct %vector2))
+    (color (:struct %color)))
+
 ; void DrawPixel(int posX, int posY, Color color) // Draw a pixel using geometry [Can be slow, use with care]
 (cffi:defcfun ("DrawPixel" draw-pixel) :void
     (posX :int)
     (posY :int)
+    (color (:struct %color)))
+
+; void DrawPixelV(Vector2 position, Color color) // Draw a pixel using geometry (Vector version) [Can be slow, use with care]
+(cffi:defcfun ("DrawPixelV" draw-pixel-v) :void
+    (position (:struct %vector2))
     (color (:struct %color)))
 
 ; bool IsKeyPressed(int key) // Check if a key has been pressed once
@@ -237,6 +255,10 @@
 
 ; bool IsKeyDown(int key) // Check if a key is being pressed
 (cffi:defcfun ("IsKeyDown" is-key-down) :bool
+    (key :int))
+
+; bool IsKeyUp(int key) // Check if a key is being pressed
+(cffi:defcfun ("IsKeyUp" is-key-up) :bool
     (key :int))
 
 ; float GetMouseWheelMove(void) // Get mouse wheel movement for X or Y, whichever is larger
@@ -344,6 +366,16 @@
                         :m2 m2 :m6 m6 :m10 m10 :m14 m14
                         :m3 m3 :m7 m7 :m11 m11 :m15 m15)))
 
+
+; Vector2 Vector2Transform(Vector2 v, Matrix mat) Transforms a Vector2 by a given Matrix
+(cffi:defcfun ("Vector2Transform" vector2-transform) (:struct %vector2)
+    (v (:struct %vector2))
+    (mat (:struct %matrix)))
+
+; Matrix MatrixMultiply(Matrix left, Matrix right) // Get two matrix multiplication NOTE: When multiplying matrices... the order matters!
+(cffi:defcfun ("MatrixMultiply" matrix-multiply) (:struct %matrix)
+    (left (:struct %matrix))
+    (right (:struct %matrix)))
 
 ; void BeginMode2D(Camera2D camera) // Begin 2D mode with custom camera (2D)
 (cffi:defcfun ("BeginMode2D" begin-mode-2d) :void
@@ -504,11 +536,6 @@
 (defparameter *cursor* 0)
 (defparameter *sensitivity* 100)
 
-(setq primes (make-array 10000 :fill-pointer 0 :adjustable t :element-type 'fixnum)
-    cursor 1)
-(prime-add 2)
-(prime-next)
-
 (declaim (optimize (speed 3) (safety 0) (debug 0)))
 (defun make-prime-generator()
     (let ((primes (make-array 10000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
@@ -560,14 +587,11 @@
             ((> value max) max)
             (t value)))
 
-(defparameter *screen-width* 800)
-(defparameter *screen-height* 600)
-
 
 (defun push-prime(p)
     (vector-push-extend p *primes*))
 
-(defun main()
+(defun primes-horizontal()
     (let ((x 1)
         (gen (make-prime-generator)))
         (setf *points* (make-array 1000 :fill-pointer 0 :adjustable t :element-type 'fixnum))
@@ -607,57 +631,124 @@
             (end-drawing))
         (close-window)))
 
-(main)
+(defun deg->rad (degrees)
+    (* degrees (/ pi 180)))
+
+(defparameter *screen-width* 800)
+(defparameter *screen-height* 600)
+
+(defun plot(function &key start end step (scale-x 1) (scale-y 1))
+    (let* ((camera (make-camera-2d
+                        :offset (make-vector2 :x 0 :y *screen-height*)
+                        :target (make-vector2 :x 0 :y 0)
+                        :rotation 0.0
+                        :zoom 1.0))
+            (is-dragging nil)
+            (mouse-delta nil)
+            (world-bottom-left (make-vector2 :x 0 :y 0))
+            (world-top-right (make-vector2 :x 0 :y 0))
+            (matrix-y-flip '((1 0 0 0)
+                                (0 -1 0 0)
+                                (0 0 1 0)
+                                (0 0 0 1)))
+            (matrix-x-scale `((,scale-x 0 0 0)
+                                (0 1 0 0)
+                                (0 0 1 0)
+                                (0 0 0 1)))
+            (matrix-y-scale `((1 0 0 0)
+                                (0 ,scale-y 0 0)
+                                (0 0 1 0)
+                                (0 0 0 1)))
+            (final-matrix (matrix-multiply
+                                (matrix-multiply
+                                    matrix-y-flip
+                                    matrix-x-scale)
+                                matrix-y-scale)))
+        (init-window *screen-width* *screen-height* "Plot")
+        (set-target-fps 60)
+        (loop until (window-should-close)
+            doing
+            (setf mouse-delta (get-mouse-wheel-move))
+            ; (let ((screen-from-world-left (get-screen-to-world-2d (list 0 0) camera))
+            ;         (screen-from-world-right (get-screen-to-world-2d (list *screen-width* 0) camera))
+            ;         (screen-from-world-top (get-screen-to-world-2d (list *screen-width* 0) camera))
+            ;         (screen-from-world-bottom (get-screen-to-world-2d (list *screen-width* 0) camera)))
+            ;     (setf (vector2-x world-bounds-x) (vector2-x screen-from-world-left)
+            ;             (vector2-y world-bounds-x) (vector2-x screen-from-world-right)))
+            (cond ((is-key-down (keyboard-key :right)) (decf (vector2-x (camera-2d-target camera)) 10))
+                    ((is-key-down (keyboard-key :left)) (incf (vector2-x (camera-2d-target camera)) 10))
+                    ((is-key-down (keyboard-key :up)) (incf (vector2-y (camera-2d-target camera)) 10))
+                    ((is-key-down (keyboard-key :down)) (decf (vector2-y (camera-2d-target camera)) 10))
+                    ((is-key-pressed (keyboard-key :minus)) (decf (camera-2d-zoom camera) 0.1))
+                    ((is-key-pressed (keyboard-key :equal)) (incf (camera-2d-zoom camera) 0.1))
+                    ((is-key-down (keyboard-key :h)) (decf (first (first matrix-x-scale)) 0.01))
+                    ((is-key-down (keyboard-key :j)) (decf (second (second matrix-y-scale)) 0.01))
+                    ((is-key-down (keyboard-key :k)) (incf (second (second matrix-y-scale)) 0.01))
+                    ((is-key-down (keyboard-key :l)) (incf (first (first matrix-x-scale)) 0.01))
+                    ((is-mouse-button-pressed (mouse-key :left)) (setf is-dragging t))
+                    ((is-mouse-button-released (mouse-key :left)) (setf is-dragging nil))
+                    ((not (zerop mouse-delta)) (setf (camera-2d-zoom camera)
+                                                        (max 0.1 (incf (camera-2d-zoom camera) (* mouse-delta 0.1)))))
+                    (is-dragging (setf mouse-delta (get-mouse-delta))
+                                    (decf (vector2-x (camera-2d-target camera)) (vector2-x mouse-delta))
+                                    (decf (vector2-y (camera-2d-target camera)) (vector2-y mouse-delta)))
+                    )
+            (begin-drawing)
+                (clear-background '(255 255 255 255))
+                (begin-mode-2d camera)
+                    (draw-line-v (vector2-transform '(0 -1000) matrix-y-flip) (vector2-transform '(0 1000) matrix-y-flip) '(255 0 0 255))
+                    (draw-line-v (vector2-transform '(-1000 0) matrix-y-flip) (vector2-transform '(1000 0) matrix-y-flip) '(255 0 0 255))
+                    (loop for i from start to end by step
+                        doing
+                        (draw-pixel-v (vector2-transform
+                                            (list i (funcall function i))
+                                            (matrix-multiply
+                                                (matrix-multiply
+                                                    matrix-y-flip
+                                                    matrix-x-scale)
+                                                matrix-y-scale))
+                                            '(0 0 255 255))
+                        ; (draw-circle-v (vector2-transform
+                        ;                     (list i (funcall function i))
+                        ;                     final-matrix) 2.0 '(0 0 255 255))
+                    )
+                (end-mode-2d)
+                (draw-fps 0 0)
+                (draw-text (format nil "Zoom = ~a" (camera-2d-zoom camera)) 0 50 25 '(255 0 0 255))
+            (end-drawing))
+        (close-window)))
+
+(defun square(x)
+    (* x x))
 
 (let ((gen (make-prime-generator)))
-    (sb-ext:gc :full t)
-    (let ((sb-ext:*gc-run-time* 0))
-        (time (funcall gen 10000000))
-    ))
+    (funcall gen 100000)
+    (plot gen :start 1 :end 100000 :step 1))
 
-(let ((camera (make-camera-2d
-                    :offset (make-vector2 :x 0 :y *screen-height*)
-                    :target (make-vector2 :x 0 :y 0)
-                    :rotation 0.0
-                    :zoom 1.0))
-        (is-dragging nil)
-        (delta nil)
-        (prime-generator (make-prime-generator))
-        (world-bounds-x (make-vector2 :x 0 :y *screen-width*)))
-    (init-window *screen-width* *screen-height* "Primes!!!")
-    (set-target-fps 60)
-    (loop until (window-should-close)
-        doing
-        (setf delta (get-mouse-wheel-move))
-        (let ((screen-from-world-left (get-screen-to-world-2d (list 0 0) camera))
-                (screen-from-world-right (get-screen-to-world-2d (list *screen-width* 0) camera)))
-            (setf (vector2-x world-bounds-x) (vector2-x screen-from-world-left)
-                    (vector2-y world-bounds-x) (vector2-x screen-from-world-right)))
-        ; (print world-bounds-x)
-        ; (funcall prime-generator world-bounds)
-        (cond ((is-key-down (keyboard-key :right)) (decf (vector2-x (camera-2d-target camera)) 10))
-                ((is-key-down (keyboard-key :left)) (incf (vector2-x (camera-2d-target camera)) 10))
-                ((is-key-down (keyboard-key :up)) (incf (vector2-y (camera-2d-target camera)) 10))
-                ((is-key-down (keyboard-key :down)) (decf (vector2-y (camera-2d-target camera)) 10))
-                ((is-key-pressed (keyboard-key :minus)) (decf (camera-2d-zoom camera) 0.1))
-                ((is-key-pressed (keyboard-key :equal)) (incf (camera-2d-zoom camera) 0.1))
-                ((is-mouse-button-pressed (mouse-key :left)) (setf is-dragging t))
-                ((is-mouse-button-released (mouse-key :left)) (setf is-dragging nil))
-                ((not (zerop delta)) (incf (camera-2d-zoom camera) (* delta 0.1)))
-                (is-dragging (setf delta (get-mouse-delta))
-                                (decf (vector2-x (camera-2d-target camera)) (vector2-x delta))
-                                (decf (vector2-y (camera-2d-target camera)) (vector2-y delta)))
-                )
-        (begin-drawing)
-            (clear-background '(255 255 0 255))
-            (begin-mode-2d camera)
-                (draw-circle 100 -100 100.0 '(255 0 0 255))
-                (loop for i from 1 to (vector2-y world-bounds-x)
-                    doing
-                    (draw-circle i (- (funcall prime-generator i)) 5.0 '(0 0 255 255))
-                )
-            (end-mode-2d)
-            (draw-fps 0 0)
-        (end-drawing))
-    (close-window))
+(plot #'log :start 1 :end 1000 :step 1)
+(plot #'sqrt :start 1 :end 1000 :step 1)
 
+(plot #'square :start 1 :end 1000 :step 1 :scale-y 1/100 :scale-x 1/10)
+
+(first (cons 1 2))
+(second (cons 1 '(2)))
+
+(pairlis '(a b c) '(1 2 3))
+(pairlis '(a b c) '(1 2 3))
+
+(defmacro with-members ((type members object) &body body)
+    (let ((obj (gensym "OBJECT")))
+        `(let ((,obj ,object))
+        (let ,(loop for member in members
+                    collect
+                    `(,member
+                        (,(intern (format nil "~A-~A" type member)
+                                (symbol-package type))
+                        ,obj)))
+            ,@body))))
+
+(with-members(color (r g b a) (make-color :r 1 :g 2 :b 3 :a 4))
+    (print r)
+    (print g)
+    (print b)
+    (print a))
