@@ -721,20 +721,17 @@
 (defun square(x)
     (* x x))
 
-(let ((gen (make-prime-generator)))
-    (funcall gen 100000)
-    (plot gen :start 1 :end 100000 :step 1))
+; (let ((gen (make-prime-generator)))
+;     (funcall gen 100000)
+;     (plot gen :start 1 :end 100000 :step 1))
 
-(plot #'log :start 1 :end 1000 :step 1)
-(plot #'sqrt :start 1 :end 1000 :step 1)
+; (plot #'log :start 1 :end 1000 :step 1)
+; (plot #'sqrt :start 1 :end 1000 :step 1)
+; (plot #'square :start 1 :end 1000 :step 1 :scale-y 1/100 :scale-x 1/10)
 
-(plot #'square :start 1 :end 1000 :step 1 :scale-y 1/100 :scale-x 1/10)
-
-(first (cons 1 2))
-(second (cons 1 '(2)))
-
-(pairlis '(a b c) '(1 2 3))
-(pairlis '(a b c) '(1 2 3))
-
-(with-members((r g b a) color (make-color :r 1 :g 2 :b 3 :a 4))
-    (list r g b a))
+(defmacro v!(&rest items)
+    (destructuring-bind (x y &optional z w) items
+        (case (length items)
+            (2 `(make-vector2 :x ,x :y ,y))
+            (3 `(make-vector3 :x ,x :y ,y :z ,z))
+            (4 `(make-vector4 :x ,x :y ,y :z ,z :w ,w)))))
