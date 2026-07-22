@@ -8,6 +8,20 @@
 (unless (cffi:foreign-library-loaded-p 'libraylib)
     (cffi:use-foreign-library libraylib))
 
+;;;; MACROS
+
+(defmacro with-gensyms(symbols &body body)
+    `(let ,(loop for sym in symbols collect `(,sym (gensym)))
+        ,@body))
+
+
+(defmacro v!(&rest items)
+    (destructuring-bind (x y &optional z w) items
+        (case (length items)
+            (2 `(make-vector2 :x ,x :y ,y))
+            (3 `(make-vector3 :x ,x :y ,y :z ,z))
+            (4 `(make-vector4 :x ,x :y ,y :z ,z :w ,w)))))
+
 ;;;; STRUCTS
 
 ; // Vector2, 2 components
