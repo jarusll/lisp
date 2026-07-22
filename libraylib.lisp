@@ -22,6 +22,14 @@
             (3 `(make-vector3 :x ,x :y ,y :z ,z))
             (4 `(make-vector4 :x ,x :y ,y :z ,z :w ,w)))))
 
+
+(defmacro with-window(width height title &body body)
+  `(progn
+     (%init-window ,width ,height ,title)
+     (unwind-protect (progn ,@body)
+		      (%close-window))))
+
+
 ;;;; STRUCTS
 
 ; // Vector2, 2 components
