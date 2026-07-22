@@ -29,6 +29,145 @@
      (unwind-protect (progn ,@body)
        (%close-window))))
 
+(defmacro with-keys(keys &body body)
+  (labels ((on-key(key &key
+		   (up nil up-p)
+		   (down nil down-p)
+		   (pressed nil pressed-p)
+		   (released nil released-p)
+		   (pressed-repeat nil pressed-repeat-p))
+      (loop for (action value supplied) in
+	    `((:up ,up ,up-p)
+	      (:down ,down ,down-p)
+	      (:pressed ,pressed ,pressed-p) 
+	      (:released ,released ,released-p)
+	      (:pressed-repeat ,pressed-repeat ,pressed-repeat-p))
+	    when supplied
+	      collect `(,value (,(ecase action
+				   (:up '%is-key-up)
+				   (:down '%is-key-down)
+				   (:pressed '%is-key-pressed)
+				   (:released '%is-key-released)
+				   (:pressed-repeat '%is-key-pressed-repeat))
+				,key)))))
+    `(let ,(loop for key in keys append (apply #'on-key key))
+       ,@body)))
+
+;;;; ENUMS
+
+(cffi:defcenum keyboard-key
+    (:null             0)        ; key: null used for no key pressed
+    (:apostrophe       39)       ; key: '
+    (:comma            44)       ; key: )
+    (:minus            45)       ; key: -
+    (:period           46)       ; key: .
+    (:slash            47)       ; key: /
+    (:zero             48)       ; key: 0
+    (:one              49)       ; key: 1
+    (:two              50)       ; key: 2
+    (:three            51)       ; key: 3
+    (:four             52)       ; key: 4
+    (:five             53)       ; key: 5
+    (:six              54)       ; key: 6
+    (:seven            55)       ; key: 7
+    (:eight            56)       ; key: 8
+    (:nine             57)       ; key: 9
+    (:semicolon        59)       ; key: ;
+    (:equal            61)       ; key: =
+    (:a                65)       ; key: a | a
+    (:b                66)       ; key: b | b
+    (:c                67)       ; key: c | c
+    (:d                68)       ; key: d | d
+    (:e                69)       ; key: e | e
+    (:f                70)       ; key: f | f
+    (:g                71)       ; key: g | g
+    (:h                72)       ; key: h | h
+    (:i                73)       ; key: i | i
+    (:j                74)       ; key: j | j
+    (:k                75)       ; key: k | k
+    (:l                76)       ; key: l | l
+    (:m                77)       ; key: m | m
+    (:n                78)       ; key: n | n
+    (:o                79)       ; key: o | o
+    (:p                80)       ; key: p | p
+    (:q                81)       ; key: q | q
+    (:r                82)       ; key: r | r
+    (:s                83)       ; key: s | s
+    (:t                84)       ; key: t | t
+    (:u                85)       ; key: u | u
+    (:v                86)       ; key: v | v
+    (:w                87)       ; key: w | w
+    (:x                88)       ; key: x | x
+    (:y                89)       ; key: y | y
+    (:z                90)       ; key: z | z
+    (:left_bracket     91)       ; key: [
+    (:backslash        92)       ; key: '\'
+    (:right_bracket    93)       ; key: ]
+    (:grave            96)       ; key: `
+    (:space            32)       ; key: space
+    (:escape           256)      ; key: esc
+    (:enter            257)      ; key: enter
+    (:tab              258)      ; key: tab
+    (:backspace        259)      ; key: backspace
+    (:insert           260)      ; key: ins
+    (:delete           261)      ; key: del
+    (:right            262)      ; key: cursor right
+    (:left             263)      ; key: cursor left
+    (:down             264)      ; key: cursor down
+    (:up               265)      ; key: cursor up
+    (:page_up          266)      ; key: page up
+    (:page_down        267)      ; key: page down
+    (:home             268)      ; key: home
+    (:end              269)      ; key: end
+    (:caps_lock        280)      ; key: caps lock
+    (:scroll_lock      281)      ; key: scroll down
+    (:num_lock         282)      ; key: num lock
+    (:print_screen     283)      ; key: print screen
+    (:pause            284)      ; key: pause
+    (:f1               290)      ; key: f1
+    (:f2               291)      ; key: f2
+    (:f3               292)      ; key: f3
+    (:f4               293)      ; key: f4
+    (:f5               294)      ; key: f5
+    (:f6               295)      ; key: f6
+    (:f7               296)      ; key: f7
+    (:f8               297)      ; key: f8
+    (:f9               298)      ; key: f9
+    (:f10              299)      ; key: f10
+    (:f11              300)      ; key: f11
+    (:f12              301)      ; key: f12
+    (:left_shift       340)      ; key: shift left
+    (:left_control     341)      ; key: control left
+    (:left_alt         342)      ; key: alt left
+    (:left_super       343)      ; key: super left
+    (:right_shift      344)      ; key: shift right
+    (:right_control    345)      ; key: control right
+    (:right_alt        346)      ; key: alt right
+    (:right_super      347)      ; key: super right
+    (:kb_menu          348)      ; key: kb menu
+    (:kp_0             320)      ; key: keypad 0
+    (:kp_1             321)      ; key: keypad 1
+    (:kp_2             322)      ; key: keypad 2
+    (:kp_3             323)      ; key: keypad 3
+    (:kp_4             324)      ; key: keypad 4
+    (:kp_5             325)      ; key: keypad 5
+    (:kp_6             326)      ; key: keypad 6
+    (:kp_7             327)      ; key: keypad 7
+    (:kp_8             328)      ; key: keypad 8
+    (:kp_9             329)      ; key: keypad 9
+    (:kp_decimal       330)      ; key: keypad .
+    (:kp_divide        331)      ; key: keypad /
+    (:kp_multiply      332)      ; key: keypad *
+    (:kp_subtract      333)      ; key: keypad -
+    (:kp_add           334)      ; key: keypad +
+    (:kp_enter         335)      ; key: keypad enter
+    (:kp_equal         336)      ; key: keypad =
+    (:back             4)        ; key: android back button
+    (:menu             5)        ; key: android menu button
+    (:volume_up        24)       ; key: android volume up button
+    (:volume_down      25))      ; key: android volume down button
+
+
 ;;;; STRUCTS
 
 ; // Vector2, 2 components
@@ -4709,120 +4848,6 @@
     (processor :pointer)
 )
 
-;;;; ENUMS
-(cffi:defcenum keyboard-key
-    (:null             0)        ; key: null used for no key pressed
-    (:apostrophe       39)       ; key: '
-    (:comma            44)       ; key: )
-    (:minus            45)       ; key: -
-    (:period           46)       ; key: .
-    (:slash            47)       ; key: /
-    (:zero             48)       ; key: 0
-    (:one              49)       ; key: 1
-    (:two              50)       ; key: 2
-    (:three            51)       ; key: 3
-    (:four             52)       ; key: 4
-    (:five             53)       ; key: 5
-    (:six              54)       ; key: 6
-    (:seven            55)       ; key: 7
-    (:eight            56)       ; key: 8
-    (:nine             57)       ; key: 9
-    (:semicolon        59)       ; key: ;
-    (:equal            61)       ; key: =
-    (:a                65)       ; key: a | a
-    (:b                66)       ; key: b | b
-    (:c                67)       ; key: c | c
-    (:d                68)       ; key: d | d
-    (:e                69)       ; key: e | e
-    (:f                70)       ; key: f | f
-    (:g                71)       ; key: g | g
-    (:h                72)       ; key: h | h
-    (:i                73)       ; key: i | i
-    (:j                74)       ; key: j | j
-    (:k                75)       ; key: k | k
-    (:l                76)       ; key: l | l
-    (:m                77)       ; key: m | m
-    (:n                78)       ; key: n | n
-    (:o                79)       ; key: o | o
-    (:p                80)       ; key: p | p
-    (:q                81)       ; key: q | q
-    (:r                82)       ; key: r | r
-    (:s                83)       ; key: s | s
-    (:t                84)       ; key: t | t
-    (:u                85)       ; key: u | u
-    (:v                86)       ; key: v | v
-    (:w                87)       ; key: w | w
-    (:x                88)       ; key: x | x
-    (:y                89)       ; key: y | y
-    (:z                90)       ; key: z | z
-    (:left_bracket     91)       ; key: [
-    (:backslash        92)       ; key: '\'
-    (:right_bracket    93)       ; key: ]
-    (:grave            96)       ; key: `
-    (:space            32)       ; key: space
-    (:escape           256)      ; key: esc
-    (:enter            257)      ; key: enter
-    (:tab              258)      ; key: tab
-    (:backspace        259)      ; key: backspace
-    (:insert           260)      ; key: ins
-    (:delete           261)      ; key: del
-    (:right            262)      ; key: cursor right
-    (:left             263)      ; key: cursor left
-    (:down             264)      ; key: cursor down
-    (:up               265)      ; key: cursor up
-    (:page_up          266)      ; key: page up
-    (:page_down        267)      ; key: page down
-    (:home             268)      ; key: home
-    (:end              269)      ; key: end
-    (:caps_lock        280)      ; key: caps lock
-    (:scroll_lock      281)      ; key: scroll down
-    (:num_lock         282)      ; key: num lock
-    (:print_screen     283)      ; key: print screen
-    (:pause            284)      ; key: pause
-    (:f1               290)      ; key: f1
-    (:f2               291)      ; key: f2
-    (:f3               292)      ; key: f3
-    (:f4               293)      ; key: f4
-    (:f5               294)      ; key: f5
-    (:f6               295)      ; key: f6
-    (:f7               296)      ; key: f7
-    (:f8               297)      ; key: f8
-    (:f9               298)      ; key: f9
-    (:f10              299)      ; key: f10
-    (:f11              300)      ; key: f11
-    (:f12              301)      ; key: f12
-    (:left_shift       340)      ; key: shift left
-    (:left_control     341)      ; key: control left
-    (:left_alt         342)      ; key: alt left
-    (:left_super       343)      ; key: super left
-    (:right_shift      344)      ; key: shift right
-    (:right_control    345)      ; key: control right
-    (:right_alt        346)      ; key: alt right
-    (:right_super      347)      ; key: super right
-    (:kb_menu          348)      ; key: kb menu
-    (:kp_0             320)      ; key: keypad 0
-    (:kp_1             321)      ; key: keypad 1
-    (:kp_2             322)      ; key: keypad 2
-    (:kp_3             323)      ; key: keypad 3
-    (:kp_4             324)      ; key: keypad 4
-    (:kp_5             325)      ; key: keypad 5
-    (:kp_6             326)      ; key: keypad 6
-    (:kp_7             327)      ; key: keypad 7
-    (:kp_8             328)      ; key: keypad 8
-    (:kp_9             329)      ; key: keypad 9
-    (:kp_decimal       330)      ; key: keypad .
-    (:kp_divide        331)      ; key: keypad /
-    (:kp_multiply      332)      ; key: keypad *
-    (:kp_subtract      333)      ; key: keypad -
-    (:kp_add           334)      ; key: keypad +
-    (:kp_enter         335)      ; key: keypad enter
-    (:kp_equal         336)      ; key: keypad =
-    (:back             4)        ; key: android back button
-    (:menu             5)        ; key: android menu button
-    (:volume_up        24)       ; key: android volume up button
-    (:volume_down      25))      ; key: android volume down button
-
-
 ; PLAYGROUND
 
 ; Vector2 Vector2Add(Vector2 v1, Vector2 v2) // Add two vectors (v1 + v2)
@@ -4850,38 +4875,11 @@
   (loop until (%window-should-close)
 	doing
 	   (print "Hello")
-	   (print (%get-key-name :comma))
 	   (%begin-drawing)
 	(%end-drawing)))
 
 (%close-window)
-(%get-key-name :escape)
 
-(on-key :escape :up is-escape-up :down is-escape-down :pressed is-esc-pressed)
-
-(defmacro with-keys(keys &body body)
-  (labels ((on-key(key &key
-		   (up nil up-p)
-		   (down nil down-p)
-		   (pressed nil pressed-p)
-		   (released nil released-p)
-		   (pressed-repeat nil pressed-repeat-p))
-      (loop for (action value supplied) in
-	    `((:up ,up ,up-p)
-	      (:down ,down ,down-p)
-	      (:pressed ,pressed ,pressed-p) 
-	      (:released ,released ,released-p)
-	      (:pressed-repeat ,pressed-repeat ,pressed-repeat-p))
-	    when supplied
-	      collect `(,value (,(ecase action
-				   (:up '%is-key-up)
-				   (:down '%is-key-down)
-				   (:pressed '%is-key-pressed)
-				   (:released '%is-key-released)
-				   (:pressed-repeat '%is-key-pressed-repeat))
-				,key)))))
-    `(let ,(loop for key in keys append (apply #'on-key key))
-       ,@body)))
 
 (with-window 600 800 "Window"
   (%set-target-fps 24)
@@ -4894,12 +4892,4 @@
 	     (when is-w-down (print "w down"))
 	     (when is-w-pressed (print "w pressed")))
 	   (%begin-drawing)
-	(%end-drawing)))
-
-
-(with-keys ((:escape :down is-esc-down :up is-esc-up)
-	    (:w :down is-w-down :up is-w-up))
-  (cond (is-esc-down (print "esc down"))
-	 (is-w-down (print "w down"))))
-
-
+	   (%end-drawing)))
