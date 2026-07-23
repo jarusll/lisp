@@ -168,6 +168,16 @@
     (:volume_down      25))      ; key: android volume down button
 
 
+(cffi:defcenum mouse-key
+    (left     0)       ; mouse button left
+    (right    1)       ; mouse button right
+    (middle   2)       ; mouse button middle (pressed wheel)
+    (side     3)       ; mouse button side (advanced mouse device)
+    (extra    4)       ; mouse button extra (advanced mouse device)
+    (forward  5)       ; mouse button forward (advanced mouse device)
+    (back     6)       ; mouse button back (advanced mouse device)
+)
+
 ;;;; STRUCTS
 
 ; // Vector2, 2 components
@@ -4881,7 +4891,7 @@
 (%close-window)
 
 
-(with-window 600 800 "Window"
+(with-window 800 600 "Window"
   (%set-target-fps 24)
   (loop until (%window-should-close)
 	doing
