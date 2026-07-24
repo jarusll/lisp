@@ -125,6 +125,16 @@
 				     (with-let* ,delta-bindings
 				       ,@body)))))))
 
+(defmacro with-texture(texture-var width height &body body)
+  `(let ((,texture-var (%load-render-texture ,width ,height)))
+     (unwind-protect (progn ,@body)
+       (%unload-render-texture ,texture-var))))
+
+(defmacro with-texture-mode(target &body body)
+  `(progn (%begin-texture-mode ,target)
+          (unwind-protect (progn ,@body)
+            (%end-texture-mode))))
+
 ;;;; ENUMS
 
 (cffi:defcenum keyboard-key
@@ -422,7 +432,38 @@
 (defmethod cffi:translate-from-foreign (ptr (type color-type))
   (cffi:with-foreign-slots ((r g b a) ptr (:struct %Color))
     (make-color :r r :g g :b b :a a)))
-  
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value symbol) (type color-type) pointer)
+  (cffi:with-foreign-slots ((r g b a) pointer (:struct %Color))
+    (ecase value
+      (:lightgray  (setf r 200 g 200 b 200 a 255))
+      (:gray       (setf r 130 g 130 b 130 a 255))
+      (:darkgray   (setf r 80  g 80  b 80  a 255))
+      (:yellow     (setf r 253 g 249 b 0   a 255))
+      (:gold       (setf r 255 g 203 b 0   a 255))
+      (:orange     (setf r 255 g 161 b 0   a 255))
+      (:pink       (setf r 255 g 109 b 194 a 255))
+      (:red        (setf r 230 g 41  b 55  a 255))
+      (:maroon     (setf r 190 g 33  b 55  a 255))
+      (:green      (setf r 0   g 228 b 48  a 255))
+      (:lime       (setf r 0   g 158 b 47  a 255))
+      (:darkgreen  (setf r 0   g 117 b 44  a 255))
+      (:skyblue    (setf r 102 g 191 b 255 a 255))
+      (:blue       (setf r 0   g 121 b 241 a 255))
+      (:darkblue   (setf r 0   g 82  b 172 a 255))
+      (:purple     (setf r 200 g 122 b 255 a 255))
+      (:violet     (setf r 135 g 60  b 190 a 255))
+      (:darkpurple (setf r 112 g 31  b 126 a 255))
+      (:beige      (setf r 211 g 176 b 131 a 255))
+      (:brown      (setf r 127 g 106 b 79  a 255))
+      (:darkbrown  (setf r 76  g 63  b 47  a 255))
+      (:white      (setf r 255 g 255 b 255 a 255))
+      (:black      (setf r 0   g 0   b 0   a 255))
+      (:blank      (setf r 0   g 0   b 0   a 0))
+      (:magenta    (setf r 255 g 0   b 255 a 255))
+      (:raywhite   (setf r 245 g 245 b 245 a 255)))))
+
 ; // Rectangle, 4 components
 ; typedef struct Rectangle {
 ;     float x;                // Rectangle top-left corner position x
@@ -5059,33 +5100,28 @@
 
 (with-window 800 600 "Window"
   (%set-target-fps 60)
-  (loop until (%window-should-close)
-	with points = (make-array 100 :fill-pointer 0 :adjustable t)
-	doing
-	   (with-mouse ((:left :down left-down?)
-			(:position :x x-pos :y y-pos))
-	     (when left-down?
-	       (vector-push-extend (list (truncate x-pos)
-					 (truncate y-pos))
-				   points))
-	     (with-drawing 
-	       (%clear-background (color! 255 0 0 255))
-	       (%draw-fps 10 10)
-	       (%draw-text (write-to-string (length points))
-			   10 50
-			   20
-			   (color! 0 255 0 255))
-	       (loop for point across points
-		     for index from 0 below (1- (length points)) by 1
-		     for left = (aref points index)
-		     for right = (aref points (1+ index))
-		     doing
-			(destructuring-bind (lx ly) left
-			  (destructuring-bind (rx ry) right
-			    (%draw-line 
-			     lx ly
-			     rx ry
-			     (color! 0 255 0 255)))))))))
+  (with-texture tex 300 300
+    (with-texture-mode tex
+      (%clear-background :pink)
+      (%draw-rectangle 0 0 150 150 :red))
+    (loop until (%window-should-close)
+	  with position-x = 0
+	  with position-y = 0
+	  doing
+	     (with-mouse ((:left :down left-down?)
+			  (:position :x x-pos :y y-pos)
+			  (:delta :x delta-x :y delta-y))
+	       (when left-down?
+		 (setf position-x (truncate x-pos)
+		       position-y (truncate y-pos)))
+	       (format t "~a ~a~%" position-x position-y)
+	       (with-drawing 
+		 (%clear-background :raywhite)
+		 (%draw-fps 10 10)
+		 (%draw-texture (render-texture-texture tex)
+				position-x
+				position-y
+				(color! 255 255 255 255)))))))
 
 (%close-window)
 
