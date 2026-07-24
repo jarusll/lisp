@@ -29,6 +29,20 @@
      (unwind-protect (progn ,@body)
        (%close-window))))
 
+(defmacro with-bindings(let-form bindings &body body)
+  (if bindings
+      `(,let-form ,bindings
+		  ,@body)
+      (car body)))
+
+(defmacro with-let(bindings &body body)
+  `(with-bindings let ,bindings
+     ,@body))
+
+(defmacro with-let*(bindings &body body)
+  `(with-bindings let* ,bindings
+     ,@body))
+    
 (defmacro with-keys(keys &body body)
   (labels ((on-key(key &key
 		   (up nil up-p)
@@ -52,6 +66,58 @@
 				,key)))))
     `(let ,(loop for key in keys append (apply #'on-key key))
        ,@body)))
+
+
+(defmacro with-mouse(actions &body body)
+  (labels ((mouse-button-p(keyword)
+	     (member keyword '(:left :right :middle :side :extra :forward :back)))
+	   (mouse-action->function(button)
+	     (ecase button
+	       (:up '%is-mouse-button-up)
+	       (:down '%is-mouse-button-down)
+	       (:pressed '%is-mouse-button-pressed)
+	       (:released '%is-mouse-button-released)))
+	   (mouse-button-bindings(button &key (up nil up-supplied-p)
+					   (down nil down-supplied-p)
+					   (pressed nil pressed-supplied-p)
+					   (released nil released-supplied-p))
+	     (loop for (mouse-action binding binding-supplied) in
+		   `((:up ,up ,up-supplied-p)
+		     (:down ,down ,down-supplied-p)
+		     (:pressed ,pressed ,pressed-supplied-p)
+		     (:released ,released ,released-supplied-p))
+		   when binding-supplied collect `(,binding (,(mouse-action->function mouse-action) ,button))))
+	   (position-bindings(&key (x nil x-supplied-p)
+				(y nil y-supplied-y))
+	     (with-gensyms(position-binding)
+	       `((,position-binding (%get-mouse-position))
+		 ,@(loop for (axis binding binding-supplied) in
+			 `((:x ,x ,x-supplied-p)
+			   (:y ,y ,y-supplied-y))
+			 when binding-supplied
+			   collect `(,binding ,(ecase axis
+						 (:x `(vector2-x ,position-binding))
+						 (:y `(vector2-y ,position-binding))))))))
+	   (delta-bindings(&key (x nil x-supplied-p)
+			     (y nil y-supplied-y))
+	     (with-gensyms(delta-binding)
+	       `((,delta-binding (%get-mouse-delta))
+		 ,@(loop for (axis binding binding-supplied) in
+			 `((:x ,x ,x-supplied-p)
+			   (:y ,y ,y-supplied-y))
+			 when binding-supplied
+			   collect `(,binding ,(ecase axis
+						 (:x `(vector2-x ,delta-binding))
+						 (:y `(vector2-y ,delta-binding)))))))))
+    (loop for action in actions
+	  for action-type = (car action)
+	  when (mouse-button-p action-type) append (apply #'mouse-button-bindings action) into mouse-bindings
+	    when (eq action-type :position) append (apply #'position-bindings (cdr action)) into position-bindings
+	      when (eq action-type :delta) append (apply #'delta-bindings (cdr action)) into delta-bindings
+		finally (return `(with-let ,mouse-bindings
+				   (with-let* ,position-bindings
+				     (with-let* ,delta-bindings
+				       ,@body)))))))
 
 ;;;; ENUMS
 
@@ -2010,22 +2076,22 @@
 ; // Input-related functions: mouse
 ; bool IsMouseButtonPressed(int button);                  // Check if a mouse button has been pressed once
 (cffi:defcfun ("IsMouseButtonPressed" %is-mouse-button-pressed) :bool
-    (button :int)
+    (button mouse-key)
 )
 
 ; bool IsMouseButtonDown(int button);                     // Check if a mouse button is being pressed
 (cffi:defcfun ("IsMouseButtonDown" %is-mouse-button-down) :bool
-    (button :int)
+    (button mouse-key)
 )
 
 ; bool IsMouseButtonReleased(int button);                 // Check if a mouse button has been released once
 (cffi:defcfun ("IsMouseButtonReleased" %is-mouse-button-released) :bool
-    (button :int)
+    (button mouse-key)
 )
 
 ; bool IsMouseButtonUp(int button);                       // Check if a mouse button is NOT being pressed
 (cffi:defcfun ("IsMouseButtonUp" %is-mouse-button-up) :bool
-    (button :int)
+    (button mouse-key)
 )
 
 ; int GetMouseX(void);                                    // Get mouse position X
@@ -4896,10 +4962,21 @@
   (loop until (%window-should-close)
 	doing
 	   (with-keys ((:a :down is-a-down :pressed is-a-pressed)
-		      (:w :down is-w-down :pressed is-w-pressed))
-	     (when is-a-down (print "a down"))
-	     (when is-a-pressed (print "a pressed"))
-	     (when is-w-down (print "w down"))
-	     (when is-w-pressed (print "w pressed")))
-	   (%begin-drawing)
-	   (%end-drawing)))
+		       (:w :down is-w-down :pressed is-w-pressed))
+	     (with-mouse((:left :down is-left-down)
+			 (:position :x x-pos)
+			 (:delta :x x-delta))
+	       (when is-a-down (print "a down"))
+	       (when is-a-pressed (print "a pressed"))
+	       (when is-w-down (print "w down"))
+	       (when is-w-pressed (print "w pressed"))
+	       (when is-left-down (print "left down"))
+	       (print x-pos)
+	       (print x-delta)
+	       (%begin-drawing)
+	       (%end-drawing)))))
+
+(with-mouse((:left :down is-left-down)
+	    (:position :x x-pos :y y-pos)
+	    (:delta :x x-delta))
+  (print is-left-down))
