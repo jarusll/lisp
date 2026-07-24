@@ -38,7 +38,8 @@
   (if bindings
       `(,let-form ,bindings
 		  ,@body)
-      (car body)))
+      `(progn
+	 ,@body)))
 
 (defmacro with-let(bindings &body body)
   `(with-bindings let ,bindings
