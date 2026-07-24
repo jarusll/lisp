@@ -293,6 +293,18 @@
     y
     z)
 
+(defmethod cffi:translate-into-foreign-memory
+    ((value vector3) (type vector3-type) pointer)
+  (cffi:with-foreign-slots ((x y z) pointer (:struct %Vector3))
+    (with-members ((x lx) (y ly) (z lz)) value vector3
+      (setf x lx
+            y ly
+            z lz))))
+
+(defmethod cffi:translate-from-foreign (ptr (type vector3-type))
+  (cffi:with-foreign-slots ((x y z) ptr (:struct %Vector3))
+    (make-vector3 :x x :y y :z z)))
+
 ; // Vector4, 4 components
 ; typedef struct Vector4 {
 ;     float x;                // Vector x component
@@ -312,6 +324,19 @@
     y
     z
     w)
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value vector4) (type vector4-type) pointer)
+  (cffi:with-foreign-slots ((x y z w) pointer (:struct %Vector4))
+    (with-members ((x lx) (y ly) (z lz) (w lw)) value vector4
+      (setf x lx
+            y ly
+            z lz
+            w lw))))
+
+(defmethod cffi:translate-from-foreign (ptr (type vector4-type))
+  (cffi:with-foreign-slots ((x y z w) ptr (:struct %Vector4))
+    (make-vector4 :x x :y y :z z :w w)))
 
 ; // Quaternion, 4 components (Vector4 alias)
 ; typedef Vector4 Quaternion;
@@ -464,6 +489,20 @@
     mipmaps
     format)
 
+(defmethod cffi:translate-into-foreign-memory
+    ((value texture) (type texture-type) pointer)
+  (cffi:with-foreign-slots ((id width height mipmaps format) pointer (:struct %Texture))
+    (with-members ((id l-id) (width l-width) (height l-height) (mipmaps l-mipmaps) (format l-format)) value texture
+      (setf id l-id
+            width l-width
+            height l-height
+            mipmaps l-mipmaps
+            format l-format))))
+
+(defmethod cffi:translate-from-foreign (ptr (type texture-type))
+  (cffi:with-foreign-slots ((id width height mipmaps format) ptr (:struct %Texture))
+    (make-texture :id id :width width :height height :mipmaps mipmaps :format format)))
+
 ; // Texture2D, same as Texture
 ; typedef Texture Texture2D;
 (cffi:defctype %Texture2D (:struct %Texture))
@@ -488,6 +527,29 @@
     id
     texture
     depth)
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value render-texture) (type render-texture-type) pointer)
+  (cffi:with-foreign-slots ((id texture depth) pointer (:struct %RenderTexture))
+    (setf id (render-texture-id value))
+    (cffi:translate-into-foreign-memory
+        (render-texture-texture value)
+        (cffi::parse-type '(:struct %Texture))
+        (cffi:foreign-slot-pointer pointer '(:struct %RenderTexture) 'texture))
+    (cffi:translate-into-foreign-memory
+        (render-texture-depth value)
+        (cffi::parse-type '(:struct %Texture))
+        (cffi:foreign-slot-pointer pointer '(:struct %RenderTexture) 'depth))))
+
+(defmethod cffi:translate-from-foreign (ptr (type render-texture-type))
+  (cffi:with-foreign-slots ((id texture depth) ptr (:struct %RenderTexture))
+    (make-render-texture :id id
+                         :texture (cffi:translate-from-foreign
+                                    (cffi:foreign-slot-pointer ptr '(:struct %RenderTexture) 'texture)
+                                    (cffi::parse-type '(:struct %Texture)))
+                         :depth (cffi:translate-from-foreign
+                                  (cffi:foreign-slot-pointer ptr '(:struct %RenderTexture) 'depth)
+                                  (cffi::parse-type '(:struct %Texture))))))
 
 ; // RenderTexture2D, same as RenderTexture
 ; typedef RenderTexture RenderTexture2D;
@@ -614,6 +676,31 @@
     target
     rotation
     zoom)
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value camera-2d) (type camera-2d-type) pointer)
+  (cffi:with-foreign-slots ((offset target rotation zoom) pointer (:struct %Camera2D))
+    (cffi:translate-into-foreign-memory
+        (camera-2d-offset value)
+        (cffi::parse-type '(:struct %Vector2))
+        (cffi:foreign-slot-pointer pointer '(:struct %Camera2D) 'offset))
+    (cffi:translate-into-foreign-memory
+        (camera-2d-target value)
+        (cffi::parse-type '(:struct %Vector2))
+        (cffi:foreign-slot-pointer pointer '(:struct %Camera2D) 'target))
+    (setf rotation (camera-2d-rotation value)
+          zoom (camera-2d-zoom value))))
+
+(defmethod cffi:translate-from-foreign (ptr (type camera-2d-type))
+  (cffi:with-foreign-slots ((offset target rotation zoom) ptr (:struct %Camera2D))
+    (make-camera-2d :offset (cffi:translate-from-foreign
+                              (cffi:foreign-slot-pointer ptr '(:struct %Camera2D) 'offset)
+                              (cffi::parse-type '(:struct %Vector2)))
+                    :target (cffi:translate-from-foreign
+                              (cffi:foreign-slot-pointer ptr '(:struct %Camera2D) 'target)
+                              (cffi::parse-type '(:struct %Vector2)))
+                    :rotation rotation
+                    :zoom zoom)))
 
 ; // Mesh, vertex data and vao/vbo
 ; typedef struct Mesh {
@@ -4967,16 +5054,6 @@
 
 (cffi:defcfun ("Vector2Length" %vector2-length) :float
     (v (:struct %Vector2)))
-
-(defmethod cffi:translate-into-foreign-memory
-    ((value vector2) (type vector2-type) pointer)
-    (cffi:with-foreign-slots ((x y) pointer (:struct %Vector2))
-        (setf x (coerce (vector2-x value) 'float)
-                y (coerce (vector2-y value) 'float))))
-
-(defmethod cffi:translate-from-foreign (ptr (type vector2-type))
-    (cffi:with-foreign-slots ((x y) ptr (:struct %Vector2))
-        (make-vector2 :x x :y y)))
 
 (%vector2-add (v! 1 1) (v! 2 2))
 
