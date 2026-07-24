@@ -4980,43 +4980,35 @@
 
 (%vector2-add (v! 1 1) (v! 2 2))
 
-(with-window 600 800 "Window"
-  (%set-target-fps 24)
-  (loop until (%window-should-close)
-	doing
-	   (print "Hello")
-	   (%begin-drawing)
-	(%end-drawing)))
-
-(%close-window)
-
-
 (with-window 800 600 "Window"
   (%set-target-fps 60)
   (loop until (%window-should-close)
 	with points = (make-array 100 :fill-pointer 0 :adjustable t)
 	doing
-	   (with-keys ((:a :down is-a-down :pressed is-a-pressed)
-		       (:w :down is-w-down :pressed is-w-pressed))
-	     (with-mouse((:left :down is-left-down)
-			 (:position :x x-pos :y y-pos)
-			 (:delta :x x-delta))
-	       (when is-a-down (print "a down"))
-	       (when is-a-pressed (print "a pressed"))
-	       (when is-w-down (print "w down"))
-	       (when is-w-pressed (print "w pressed"))
-	       (when is-left-down (print "left down"))
+	   (with-mouse ((:left :down left-down?)
+			(:position :x x-pos :y y-pos))
+	     (when left-down?
 	       (vector-push-extend (list (truncate x-pos)
 					 (truncate y-pos))
-				   points)
-	       (print (length points))
-	       (with-drawing
-		 (%clear-background (color! 255 0 0 255))
-		 (%draw-fps 10 10)
-		 (loop for pair across points
-		       doing
-			  (destructuring-bind (a b) pair
-			    (%draw-pixel
-			     a
-			     b
+				   points))
+	     (with-drawing 
+	       (%clear-background (color! 255 0 0 255))
+	       (%draw-fps 10 10)
+	       (%draw-text (write-to-string (length points))
+			   10 50
+			   20
+			   (color! 0 255 0 255))
+	       (loop for point across points
+		     for index from 0 below (1- (length points)) by 1
+		     for left = (aref points index)
+		     for right = (aref points (1+ index))
+		     doing
+			(destructuring-bind (lx ly) left
+			  (destructuring-bind (rx ry) right
+			    (%draw-line 
+			     lx ly
+			     rx ry
 			     (color! 0 255 0 255)))))))))
+
+(%close-window)
+
