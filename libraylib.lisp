@@ -29,6 +29,11 @@
      (unwind-protect (progn ,@body)
        (%close-window))))
 
+(defmacro with-drawing(&body body)
+  `(progn (%begin-drawing)
+	  (unwind-protect (progn ,@body)
+	    (%end-drawing))))
+
 (defmacro with-bindings(let-form bindings &body body)
   (if bindings
       `(,let-form ,bindings
@@ -260,6 +265,16 @@
     x
     y)
 
+(defmethod cffi:translate-into-foreign-memory
+    ((value vector2) (type vector2-type) pointer)
+    (cffi:with-foreign-slots ((x y) pointer (:struct %Vector2))
+        (setf x (coerce (vector2-x value) 'float)
+                y (coerce (vector2-y value) 'float))))
+
+(defmethod cffi:translate-from-foreign (ptr (type vector2-type))
+    (cffi:with-foreign-slots ((x y) ptr (:struct %Vector2))
+        (make-vector2 :x x :y y)))
+
 ; // Vector3, 3 components
 ; typedef struct Vector3 {
 ;     float x;                // Vector x component
@@ -361,11 +376,27 @@
     (a :unsigned-char))
 
 (defstruct color
-    r
-    g
-    b
-    a)
+  r
+  g
+  b
+  a)
 
+(defmacro color!(r g b a)
+  `(make-color :r ,r :g ,g :b ,b :a ,a))
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value color) (type color-type) pointer)
+  (cffi:with-foreign-slots ((r g b a) pointer (:struct %Color))
+    (with-members ((r lr) (g lg) (b lb) (a la)) value color
+      (setf r lr
+	    g lg
+	    b lb
+	    a la))))
+
+(defmethod cffi:translate-from-foreign (ptr (type color-type))
+  (cffi:with-foreign-slots ((r g b a) ptr (:struct %Color))
+    (make-color :r r :g g :b b :a a)))
+  
 ; // Rectangle, 4 components
 ; typedef struct Rectangle {
 ;     float x;                // Rectangle top-left corner position x
@@ -1063,13 +1094,15 @@
     events)
 
 (defmacro with-members(members obj type &body body)
-    (with-gensyms(obj-var)
-        `(let ((,obj-var ,obj))
-            (symbol-macrolet
-                ,(loop for member in members
-                    for accessor = (format nil "~a-~a" type member)
-                    collecting `(,member (,(intern accessor (symbol-package type)) ,obj-var)))
-                ,@body))))
+  (with-gensyms(obj-var)
+    `(let ((,obj-var ,obj))
+       (symbol-macrolet
+           ,(loop for member in members
+		  for binding = (if (atom member) member (second member))
+		  for slot = (if (atom member) member (first member))
+                  for accessor = (format nil "~a-~a" type slot)
+                  collecting `(,binding (,(intern accessor (symbol-package type)) ,obj-var)))
+         ,@body))))
 
 ;;;; FUNCTIONS
 ; // Window-related functions
@@ -4958,25 +4991,31 @@
 
 
 (with-window 800 600 "Window"
-  (%set-target-fps 24)
+  (%set-target-fps 60)
   (loop until (%window-should-close)
+	with points = (make-array 100 :fill-pointer 0 :adjustable t)
 	doing
 	   (with-keys ((:a :down is-a-down :pressed is-a-pressed)
 		       (:w :down is-w-down :pressed is-w-pressed))
 	     (with-mouse((:left :down is-left-down)
-			 (:position :x x-pos)
+			 (:position :x x-pos :y y-pos)
 			 (:delta :x x-delta))
 	       (when is-a-down (print "a down"))
 	       (when is-a-pressed (print "a pressed"))
 	       (when is-w-down (print "w down"))
 	       (when is-w-pressed (print "w pressed"))
 	       (when is-left-down (print "left down"))
-	       (print x-pos)
-	       (print x-delta)
-	       (%begin-drawing)
-	       (%end-drawing)))))
-
-(with-mouse((:left :down is-left-down)
-	    (:position :x x-pos :y y-pos)
-	    (:delta :x x-delta))
-  (print is-left-down))
+	       (vector-push-extend (list (truncate x-pos)
+					 (truncate y-pos))
+				   points)
+	       (print (length points))
+	       (with-drawing
+		 (%clear-background (color! 255 0 0 255))
+		 (%draw-fps 10 10)
+		 (loop for pair across points
+		       doing
+			  (destructuring-bind (a b) pair
+			    (%draw-pixel
+			     a
+			     b
+			     (color! 0 255 0 255)))))))))
