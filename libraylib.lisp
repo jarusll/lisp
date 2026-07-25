@@ -135,6 +135,17 @@
           (unwind-protect (progn ,@body)
             (%end-texture-mode))))
 
+(defmacro with-members(members obj type &body body)
+  (with-gensyms(obj-var)
+    `(let ((,obj-var ,obj))
+       (symbol-macrolet
+           ,(loop for member in members
+		  for binding = (if (atom member) member (second member))
+		  for slot = (if (atom member) member (first member))
+                  for accessor = (format nil "~a-~a" type slot)
+                  collecting `(,binding (,(intern accessor (symbol-package type)) ,obj-var)))
+         ,@body))))
+
 ;;;; ENUMS
 
 (cffi:defcenum keyboard-key
@@ -5114,14 +5125,36 @@
 	       (when left-down?
 		 (setf position-x (truncate x-pos)
 		       position-y (truncate y-pos)))
-	       (format t "~a ~a~%" position-x position-y)
 	       (with-drawing 
 		 (%clear-background :raywhite)
 		 (%draw-fps 10 10)
 		 (%draw-texture (render-texture-texture tex)
 				position-x
 				position-y
-				(color! 255 255 255 255)))))))
+				:white))))))
+
+(defun plot(function)
+  (with-window 800 800 "Plot"
+    (%set-target-fps 60)
+    (with-texture plot-texture 800 800
+      (with-texture-mode plot-texture
+	(%clear-background :white)
+	(%draw-rectangle 0 0 400 400 :pink)
+	(%draw-rectangle 400 400 400 400 :yellow)
+	(loop for i from 0 below 800
+	      doing
+	      (%draw-pixel i (funcall function i) :blue)))
+      (loop until (%window-should-close)
+	    doing
+	       (with-drawing
+		 (%clear-background :white)
+		 (%draw-texture (render-texture-texture plot-texture)
+				0
+				0
+				:white)
+		 (%draw-fps 10 10))))))
+
+(plot #'(lambda(x) x))
 
 (%close-window)
 
