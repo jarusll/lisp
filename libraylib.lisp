@@ -135,6 +135,11 @@
           (unwind-protect (progn ,@body)
             (%end-texture-mode))))
 
+(defmacro with-camera-2d(camera &body body)
+  `(progn (%begin-mode-2d ,camera)
+          (unwind-protect (progn ,@body)
+            (%end-mode-2d))))
+
 (defmacro with-members(members obj type &body body)
   (with-gensyms(obj-var)
     `(let ((,obj-var ,obj))
@@ -5133,28 +5138,37 @@
 				position-y
 				:white))))))
 
-(defun plot(function)
-  (with-window 800 800 "Plot"
-    (%set-target-fps 60)
-    (with-texture plot-texture 800 800
-      (with-texture-mode plot-texture
-	(%clear-background :white)
-	(%draw-rectangle 0 0 400 400 :pink)
-	(%draw-rectangle 400 400 400 400 :yellow)
-	(loop for i from 0 below 800
-	      doing
-	      (%draw-pixel i (funcall function i) :blue)))
-      (loop until (%window-should-close)
-	    doing
-	       (with-drawing
-		 (%clear-background :white)
-		 (%draw-texture (render-texture-texture plot-texture)
-				0
-				0
-				:white)
-		 (%draw-fps 10 10))))))
-
-(plot #'(lambda(x) x))
+(defun plot(function &key from to (scale-x 1) (scale-y 1))
+  (loop for i from from below to
+	for x = (round (* i scale-x))
+	for y = (round (* (funcall function i) scale-y))
+	doing
+	   (%draw-pixel x y :blue)))
 
 (%close-window)
+
+(let ((gen (make-prime-generator)))
+  (funcall gen 10000)
+  (plot #'(lambda(x) (funcall gen x)) :from 1 :to 10000 :scale-x 799/9999 :scale-y 799/104729))
+
+(plot #'(lambda(x) (* 2 x)) :from 1 :to 1000)
+
+(with-window 800 800 "Plot"
+  (with-texture plot-texture 800 800
+    (with-texture-mode plot-texture
+      (%draw-circle 0 0 100.0 :blue)
+      (%draw-circle 0 799 100.0 :red)
+      (%draw-circle 799 0 100.0 :yellow)
+      (%draw-circle 799 799 100.0 :green)
+      (plot #'(lambda(x) x) :from 1 :to 1000))
+    (loop until (%window-should-close)
+	  with camera = (make-camera-2d :offset (v! 0 0) :target (v! 0 799) :rotation 0.0 :zoom -1.0)
+	  doing
+	     (with-drawing
+	       (with-camera-2d camera
+		 (%clear-background :white)
+		 (%draw-circle 0 0 100.0 :blue)
+		 (%draw-circle 0 799 100.0 :red)
+		 (%draw-circle 799 0 100.0 :yellow)
+		 (%draw-circle 799 799 100.0 :green))))))
 
