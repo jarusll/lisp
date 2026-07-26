@@ -5624,16 +5624,51 @@ Unannotated args pass through unchanged."
 	 (setf *draw-transform* ,old-matrix)))))
        
        
-  
 (with-window 800 800 "Plot"
+  (%set-target-fps 60)
   (loop until (%window-should-close)
+	with camera-dx = 0
+	with camera-dy = 0
+	with scale = 1.0
 	doing
-	   (with-drawing
-	     (%clear-background :white)
-	     (with-transform (translate-matrix! 0 800)
-	       (with-transform (scale-matrix! 1 -1)
-		 (draw-circle 0 0 100.0 :blue)
-		 (draw-circle 0 799 100.0 :red)
-		 (draw-circle 799 0 100.0 :yellow)
-		 (draw-circle 799 799 100.0 :green))))))
+	   (with-keys ((:w :down is-w-down)
+		       (:a :down is-a-down)
+		       (:s :down is-s-down)
+		       (:d :down is-d-down))
+	     (with-mouse ((:left :down dragging?)
+			  (:delta :x delta-x :y delta-y)
+			  (:wheel :move wheel-move))
+	       (when is-w-down (decf camera-dy 10))
+	       (when is-a-down (decf camera-dx 10))
+	       (when is-s-down (incf camera-dy 10))
+	       (when is-d-down (incf camera-dx 10))
+	       (when dragging?
+		 (decf camera-dx delta-x)
+		 (decf camera-dy delta-y))
+	       (when wheel-move
+		 (incf scale (* 0.01 wheel-move)))
+	       (with-drawing
+		 (%clear-background :white)
+		 (with-transform
+		     (reduce #'matrix*
+			     (list
+			      (translate-matrix! (- camera-dx) (- camera-dy))
+			      (scale-matrix! scale scale)
+			      (translate-matrix! 0 800)
+			      (scale-matrix! 1 -1)))
+		   (draw-circle 0 0 100.0 :blue)
+		   (draw-circle 0 799 100.0 :red)
+		   (draw-circle 799 0 100.0 :yellow)
+		   (draw-circle 799 799 100.0 :green))
+		 (draw-fps 10 10)
+		 (draw-text (format nil "Position delta (~a,~a)~%" camera-dx camera-dy) 10 40 25 :green)
+		 (draw-text (cond (dragging? "Dragging")
+				  (is-w-down "W")
+				  (is-a-down "A")
+				  (is-s-down "S")
+				  (is-d-down "D")
+				  ((not (zerop wheel-move)) "Scrolling")
+				  (t ""))
+			    350	400 25 :blue))))))
+
 
