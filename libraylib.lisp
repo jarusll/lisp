@@ -120,16 +120,33 @@
 			 when binding-supplied
 			   collect `(,binding ,(ecase axis
 						 (:x `(vector2-x ,delta-binding))
-						 (:y `(vector2-y ,delta-binding)))))))))
+						 (:y `(vector2-y ,delta-binding))))))))
+	   (wheel-bindings(&key (x nil x-supplied-p)
+			     (y nil y-supplied-p)
+			     (move nil move-supplied-p))
+	     `(,@(when (or x-supplied-p y-supplied-p)
+		   (with-gensyms(wheel-binding)
+		     `((,wheel-binding (%get-mouse-wheel-move-v))
+		       ,@(loop for (axis binding binding-supplied) in
+			       `((:x ,x ,x-supplied-p)
+				 (:y ,y ,y-supplied-p))
+			       when binding-supplied
+				 collect `(,binding ,(ecase axis
+						       (:x `(vector2-x ,wheel-binding))
+						       (:y `(vector2-y ,wheel-binding))))))))
+	       ,@(when move-supplied-p
+		   `((,move (%get-mouse-wheel-move)))))))
     (loop for action in actions
 	  for action-type = (car action)
 	  when (mouse-button-p action-type) append (apply #'mouse-button-bindings action) into mouse-bindings
 	    when (eq action-type :position) append (apply #'position-bindings (cdr action)) into position-bindings
 	      when (eq action-type :delta) append (apply #'delta-bindings (cdr action)) into delta-bindings
-		finally (return `(with-let ,mouse-bindings
-				   (with-let* ,position-bindings
-				     (with-let* ,delta-bindings
-				       ,@body)))))))
+		when (eq action-type :wheel) append (apply #'wheel-bindings (cdr action)) into wheel-bindings
+		  finally (return `(with-let ,mouse-bindings
+				     (with-let* ,position-bindings
+				       (with-let* ,delta-bindings
+					 (with-let* ,wheel-bindings
+					   ,@body))))))))
 
 (defmacro with-texture(texture-var width height &body body)
   `(let ((,texture-var (%load-render-texture ,width ,height)))
