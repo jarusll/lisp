@@ -8,6 +8,12 @@
 (unless (cffi:foreign-library-loaded-p 'libraylib)
     (cffi:use-foreign-library libraylib))
 
+;;;; GLOBALS
+(defparameter *draw-transform* (matrix! ((1 0 0 0)
+					 (0 1 0 0)
+					 (0 0 1 0)
+					 (0 0 0 1))))
+
 ;;;; MACROS
 
 (defmacro with-gensyms(symbols &body body)
@@ -139,6 +145,57 @@
   `(progn (%begin-mode-2d ,camera)
           (unwind-protect (progn ,@body)
             (%end-mode-2d))))
+
+(defmacro matrix! (rows)
+  "Supply up to 4 rows of up to 4 values. Missing columns and rows are filled with 0."
+  (let ((r0 (append (coerce (or (nth 0 rows) '()) 'list)
+                    '(0 0 0 0)))
+        (r1 (append (coerce (or (nth 1 rows) '()) 'list)
+                    '(0 0 0 0)))
+        (r2 (append (coerce (or (nth 2 rows) '()) 'list)
+                    '(0 0 0 0)))
+        (r3 (append (coerce (or (nth 3 rows) '()) 'list)
+                    '(0 0 0 0))))
+    `(make-matrix :m0 ,(nth 0 r0) :m4 ,(nth 1 r0) :m8 ,(nth 2 r0) :m12 ,(nth 3 r0)
+                  :m1 ,(nth 0 r1) :m5 ,(nth 1 r1) :m9 ,(nth 2 r1) :m13 ,(nth 3 r1)
+                  :m2 ,(nth 0 r2) :m6 ,(nth 1 r2) :m10 ,(nth 2 r2) :m14 ,(nth 3 r2)
+                  :m3 ,(nth 0 r3) :m7 ,(nth 1 r3) :m11 ,(nth 2 r3) :m15 ,(nth 3 r3))))
+
+(defun matrix* (a b)
+  (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) a matrix
+    (with-members ((m0 b-m0) (m4 b-m4) (m8 b-m8) (m12 b-m12)
+                    (m1 b-m1) (m5 b-m5) (m9 b-m9) (m13 b-m13)
+                    (m2 b-m2) (m6 b-m6) (m10 b-m10) (m14 b-m14)
+                    (m3 b-m3) (m7 b-m7) (m11 b-m11) (m15 b-m15)) b matrix
+      (make-matrix
+        :m0  (+ (* m0 b-m0)  (* m4 b-m1)  (* m8 b-m2)   (* m12 b-m3))
+        :m4  (+ (* m0 b-m4)  (* m4 b-m5)  (* m8 b-m6)   (* m12 b-m7))
+        :m8  (+ (* m0 b-m8)  (* m4 b-m9)  (* m8 b-m10)  (* m12 b-m11))
+        :m12 (+ (* m0 b-m12) (* m4 b-m13) (* m8 b-m14)  (* m12 b-m15))
+        :m1  (+ (* m1 b-m0)  (* m5 b-m1)  (* m9 b-m2)   (* m13 b-m3))
+        :m5  (+ (* m1 b-m4)  (* m5 b-m5)  (* m9 b-m6)   (* m13 b-m7))
+        :m9  (+ (* m1 b-m8)  (* m5 b-m9)  (* m9 b-m10)  (* m13 b-m11))
+        :m13 (+ (* m1 b-m12) (* m5 b-m13) (* m9 b-m14)  (* m13 b-m15))
+        :m2  (+ (* m2 b-m0)  (* m6 b-m1)  (* m10 b-m2)  (* m14 b-m3))
+        :m6  (+ (* m2 b-m4)  (* m6 b-m5)  (* m10 b-m6)  (* m14 b-m7))
+        :m10 (+ (* m2 b-m8)  (* m6 b-m9)  (* m10 b-m10) (* m14 b-m11))
+        :m14 (+ (* m2 b-m12) (* m6 b-m13) (* m10 b-m14) (* m14 b-m15))
+        :m3  (+ (* m3 b-m0)  (* m7 b-m1)  (* m11 b-m2)  (* m15 b-m3))
+        :m7  (+ (* m3 b-m4)  (* m7 b-m5)  (* m11 b-m6)  (* m15 b-m7))
+        :m11 (+ (* m3 b-m8)  (* m7 b-m9)  (* m11 b-m10) (* m15 b-m11))
+         :m15 (+ (* m3 b-m12) (* m7 b-m13) (* m11 b-m14) (* m15 b-m15))))))
+
+(defmacro translate-matrix! (&optional (x 0) (y 0) (z 0))
+  `(matrix! ((1 0 0 ,x)
+             (0 1 0 ,y)
+             (0 0 1 ,z)
+             (0 0 0 1))))
+
+(defmacro scale-matrix! (&optional (x 1) (y 1) (z 1))
+  `(matrix! ((,x 0 0 0)
+             (0 ,y 0 0)
+             (0 0 ,z 0)
+             (0 0 0 1))))
 
 (defmacro with-members(members obj type &body body)
   (with-gensyms(obj-var)
@@ -412,6 +469,33 @@
     m7
     m11
     m15)
+
+(defmethod cffi:translate-into-foreign-memory
+    ((value matrix) (type matrix-type) pointer)
+  (cffi:with-foreign-slots ((m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) pointer (:struct %Matrix))
+    (setf m0 (coerce (matrix-m0 value) 'float)
+          m4 (coerce (matrix-m4 value) 'float)
+          m8 (coerce (matrix-m8 value) 'float)
+          m12 (coerce (matrix-m12 value) 'float)
+          m1 (coerce (matrix-m1 value) 'float)
+          m5 (coerce (matrix-m5 value) 'float)
+          m9 (coerce (matrix-m9 value) 'float)
+          m13 (coerce (matrix-m13 value) 'float)
+          m2 (coerce (matrix-m2 value) 'float)
+          m6 (coerce (matrix-m6 value) 'float)
+          m10 (coerce (matrix-m10 value) 'float)
+          m14 (coerce (matrix-m14 value) 'float)
+          m3 (coerce (matrix-m3 value) 'float)
+          m7 (coerce (matrix-m7 value) 'float)
+          m11 (coerce (matrix-m11 value) 'float)
+          m15 (coerce (matrix-m15 value) 'float))))
+
+(defmethod cffi:translate-from-foreign (ptr (type matrix-type))
+  (cffi:with-foreign-slots ((m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) ptr (:struct %Matrix))
+    (make-matrix :m0 m0 :m4 m4 :m8 m8 :m12 m12
+                 :m1 m1 :m5 m5 :m9 m9 :m13 m13
+                 :m2 m2 :m6 m6 :m10 m10 :m14 m14
+                 :m3 m3 :m7 m7 :m11 m11 :m15 m15)))
 
 ; // Color, 4 components, R8G8B8A8 (32bit)
 ; typedef struct Color {
@@ -5102,6 +5186,346 @@
     (processor :pointer)
 )
 
+;;;; TRANSFORMED DRAWING HELPERS
+
+(defun transform-point (x y)
+  "Transform a 2D point by *draw-transform*. Returns two rounded integer values."
+  (with-members (m0 m4 m12 m1 m5 m13) *draw-transform* matrix
+    (values
+      (round (+ (* m0 x) (* m4 y) m12))
+      (round (+ (* m1 x) (* m5 y) m13)))))
+
+(defun transform-point-2 (v)
+  "Transform a Vector2 by *draw-transform*."
+  (with-members (m0 m4 m12 m1 m5 m13) *draw-transform* matrix
+    (make-vector2
+      :x (+ (* m0 (vector2-x v)) (* m4 (vector2-y v)) m12)
+      :y (+ (* m1 (vector2-x v)) (* m5 (vector2-y v)) m13))))
+
+(defun transform-point-3 (v)
+  "Transform a Vector3 by *draw-transform* (treated as w = 1)."
+  (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14) *draw-transform* matrix
+    (make-vector3
+      :x (+ (* m0 (vector3-x v)) (* m4 (vector3-y v)) (* m8 (vector3-z v)) m12)
+      :y (+ (* m1 (vector3-x v)) (* m5 (vector3-y v)) (* m9 (vector3-z v)) m13)
+      :z (+ (* m2 (vector3-x v)) (* m6 (vector3-y v)) (* m10 (vector3-z v)) m14))))
+
+(defun transform-point-4 (v)
+  "Transform a Vector4 by *draw-transform*."
+  (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) *draw-transform* matrix
+    (make-vector4
+      :x (+ (* m0 (vector4-x v)) (* m4 (vector4-y v)) (* m8 (vector4-z v)) (* m12 (vector4-w v)))
+      :y (+ (* m1 (vector4-x v)) (* m5 (vector4-y v)) (* m9 (vector4-z v)) (* m13 (vector4-w v)))
+      :z (+ (* m2 (vector4-x v)) (* m6 (vector4-y v)) (* m10 (vector4-z v)) (* m14 (vector4-w v)))
+      :w (+ (* m3 (vector4-x v)) (* m7 (vector4-y v)) (* m11 (vector4-z v)) (* m15 (vector4-w v))))))
+
+(defmacro defdraw (name arg-spec &body body)
+  "Define a drawing wrapper that applies *draw-transform* to annotated args.
+Annotations:
+  position-x / position-y  : scalar 2D point coordinates
+  position-2               : Vector2
+  position-3               : Vector3
+  position-4               : Vector4
+Unannotated args pass through unchanged."
+  (labels ((normalize (annotation)
+             (if (keywordp annotation)
+                 annotation
+                 (intern (symbol-name annotation) :keyword)))
+           (parse (spec)
+             (loop with pending-x = nil
+                   with result = nil
+                   for item in spec
+                   do (cond ((atom item)
+                             (push `(:plain ,item) result))
+                            ((and (consp item) (= (length item) 2))
+                             (destructuring-bind (name annotation) item
+                               (case (normalize annotation)
+                                 ((:position-x) (setf pending-x name))
+                                 ((:position-y)
+                                  (if pending-x
+                                      (progn (push `(:point ,pending-x ,name) result)
+                                             (setf pending-x nil))
+                                      (error "Unpaired :position-y in defdraw: ~a" item)))
+                                 ((:position-2) (push `(:vector2 ,name) result))
+                                 ((:position-3) (push `(:vector3 ,name) result))
+                                 ((:position-4) (push `(:vector4 ,name) result))
+                                 (t (error "Unknown annotation ~a in defdraw" annotation)))))
+                            (t (error "Malformed arg spec in defdraw: ~a" item)))
+                   finally (when pending-x
+                             (error "Unpaired :position-x in defdraw: ~a" pending-x))
+                   finally (return (nreverse result))))
+           (build (groups body)
+             (if (null groups)
+                 `(progn ,@body)
+                 (let ((group (first groups)))
+                   (ecase (first group)
+                     (:plain (build (rest groups) body))
+                     (:point (let ((x (second group)) (y (third group)))
+                               `(multiple-value-bind (,x ,y) (transform-point ,x ,y)
+                                  ,(build (rest groups) body))))
+                     (:vector2 (let ((name (second group)))
+                                 `(let ((,name (transform-point-2 ,name)))
+                                    ,(build (rest groups) body))))
+                     (:vector3 (let ((name (second group)))
+                                 `(let ((,name (transform-point-3 ,name)))
+                                    ,(build (rest groups) body))))
+                     (:vector4 (let ((name (second group)))
+                                 `(let ((,name (transform-point-4 ,name)))
+                                    ,(build (rest groups) body)))))))))
+    (let ((raw-names (mapcar (lambda (a) (if (atom a) a (first a))) arg-spec)))
+      `(defun ,name ,raw-names
+         ,(build (parse arg-spec) body)))))
+
+
+;;;; 2D SHAPE WRAPPERS
+
+(defdraw draw-pixel ((x position-x) (y position-y) color)
+  (%draw-pixel x y color))
+
+(defdraw draw-pixel-v ((position position-2) color)
+  (%draw-pixel-v position color))
+
+(defdraw draw-line ((startPosX position-x) (startPosY position-y) (endPosX position-x) (endPosY position-y) color)
+  (%draw-line startPosX startPosY endPosX endPosY color))
+
+(defdraw draw-line-v ((startPos position-2) (endPos position-2) color)
+  (%draw-line-v startPos endPos color))
+
+(defdraw draw-line-ex ((startPos position-2) (endPos position-2) thick color)
+  (%draw-line-ex startPos endPos thick color))
+
+(defdraw draw-line-bezier ((startPos position-2) (endPos position-2) thick color)
+  (%draw-line-bezier startPos endPos thick color))
+
+(defdraw draw-line-dashed ((startPos position-2) (endPos position-2) dashSize spaceSize color)
+  (%draw-line-dashed startPos endPos dashSize spaceSize color))
+
+(defdraw draw-circle ((centerX position-x) (centerY position-y) radius color)
+  (%draw-circle centerX centerY radius color))
+
+(defdraw draw-circle-v ((center position-2) radius color)
+  (%draw-circle-v center radius color))
+
+(defdraw draw-circle-gradient ((center position-2) radius inner outer)
+  (%draw-circle-gradient center radius inner outer))
+
+(defdraw draw-circle-sector ((center position-2) radius startAngle endAngle segments color)
+  (%draw-circle-sector center radius startAngle endAngle segments color))
+
+(defdraw draw-circle-sector-lines ((center position-2) radius startAngle endAngle segments color)
+  (%draw-circle-sector-lines center radius startAngle endAngle segments color))
+
+(defdraw draw-circle-lines ((centerX position-x) (centerY position-y) radius color)
+  (%draw-circle-lines centerX centerY radius color))
+
+(defdraw draw-circle-lines-v ((center position-2) radius color)
+  (%draw-circle-lines-v center radius color))
+
+(defdraw draw-ellipse ((centerX position-x) (centerY position-y) radiusH radiusV color)
+  (%draw-ellipse centerX centerY radiusH radiusV color))
+
+(defdraw draw-ellipse-v ((center position-2) radiusH radiusV color)
+  (%draw-ellipse-v center radiusH radiusV color))
+
+(defdraw draw-ellipse-lines ((centerX position-x) (centerY position-y) radiusH radiusV color)
+  (%draw-ellipse-lines centerX centerY radiusH radiusV color))
+
+(defdraw draw-ellipse-lines-v ((center position-2) radiusH radiusV color)
+  (%draw-ellipse-lines-v center radiusH radiusV color))
+
+(defdraw draw-ring ((center position-2) innerRadius outerRadius startAngle endAngle segments color)
+  (%draw-ring center innerRadius outerRadius startAngle endAngle segments color))
+
+(defdraw draw-ring-lines ((center position-2) innerRadius outerRadius startAngle endAngle segments color)
+  (%draw-ring-lines center innerRadius outerRadius startAngle endAngle segments color))
+
+(defdraw draw-rectangle ((posX position-x) (posY position-y) width height color)
+  (%draw-rectangle posX posY width height color))
+
+(defdraw draw-rectangle-v ((position position-2) size color)
+  (%draw-rectangle-v position size color))
+
+(defdraw draw-rectangle-pro (rec origin rotation color)
+  (%draw-rectangle-pro rec origin rotation color))
+
+(defdraw draw-rectangle-gradient-v ((posX position-x) (posY position-y) width height top bottom)
+  (%draw-rectangle-gradient-v posX posY width height top bottom))
+
+(defdraw draw-rectangle-gradient-h ((posX position-x) (posY position-y) width height left right)
+  (%draw-rectangle-gradient-h posX posY width height left right))
+
+(defdraw draw-rectangle-lines ((posX position-x) (posY position-y) width height color)
+  (%draw-rectangle-lines posX posY width height color))
+
+(defdraw draw-rectangle-lines-ex (rec lineThick color)
+  (%draw-rectangle-lines-ex rec lineThick color))
+
+(defdraw draw-rectangle-rounded (rec roundness segments color)
+  (%draw-rectangle-rounded rec roundness segments color))
+
+(defdraw draw-rectangle-rounded-lines (rec roundness segments color)
+  (%draw-rectangle-rounded-lines rec roundness segments color))
+
+(defdraw draw-rectangle-rounded-lines-ex (rec roundness segments lineThick color)
+  (%draw-rectangle-rounded-lines-ex rec roundness segments lineThick color))
+
+(defdraw draw-triangle ((v1 position-2) (v2 position-2) (v3 position-2) color)
+  (%draw-triangle v1 v2 v3 color))
+
+(defdraw draw-triangle-lines ((v1 position-2) (v2 position-2) (v3 position-2) color)
+  (%draw-triangle-lines v1 v2 v3 color))
+
+(defdraw draw-poly ((center position-2) sides radius rotation color)
+  (%draw-poly center sides radius rotation color))
+
+(defdraw draw-poly-lines ((center position-2) sides radius rotation color)
+  (%draw-poly-lines center sides radius rotation color))
+
+(defdraw draw-poly-lines-ex ((center position-2) sides radius rotation lineThick color)
+  (%draw-poly-lines-ex center sides radius rotation lineThick color))
+
+(defdraw draw-spline-segment-linear ((p1 position-2) (p2 position-2) thick color)
+  (%draw-spline-segment-linear p1 p2 thick color))
+
+(defdraw draw-spline-segment-basis ((p1 position-2) (p2 position-2) (p3 position-2) (p4 position-2) thick color)
+  (%draw-spline-segment-basis p1 p2 p3 p4 thick color))
+
+(defdraw draw-spline-segment-catmull-rom ((p1 position-2) (p2 position-2) (p3 position-2) (p4 position-2) thick color)
+  (%draw-spline-segment-catmull-rom p1 p2 p3 p4 thick color))
+
+(defdraw draw-spline-segment-bezier-quadratic ((p1 position-2) (c2 position-2) (p3 position-2) thick color)
+  (%draw-spline-segment-bezier-quadratic p1 c2 p3 thick color))
+
+(defdraw draw-spline-segment-bezier-cubic ((p1 position-2) (c2 position-2) (c3 position-2) (p4 position-2) thick color)
+  (%draw-spline-segment-bezier-cubic p1 c2 c3 p4 thick color))
+
+
+;;;; TEXTURE / TEXT WRAPPERS
+
+(defdraw draw-texture (texture (posX position-x) (posY position-y) tint)
+  (%draw-texture texture posX posY tint))
+
+(defdraw draw-texture-v (texture (position position-2) tint)
+  (%draw-texture-v texture position tint))
+
+(defdraw draw-texture-ex (texture (position position-2) rotation scale tint)
+  (%draw-texture-ex texture position rotation scale tint))
+
+(defdraw draw-texture-rec (texture source (position position-2) tint)
+  (%draw-texture-rec texture source position tint))
+
+(defdraw draw-texture-pro (texture source dest origin rotation tint)
+  (%draw-texture-pro texture source dest origin rotation tint))
+
+(defdraw draw-texture-n-patch (texture nPatchInfo dest origin rotation tint)
+  (%draw-texture-n-patch texture nPatchInfo dest origin rotation tint))
+
+(defdraw draw-fps ((posX position-x) (posY position-y))
+  (%draw-fps posX posY))
+
+(defdraw draw-text (text (posX position-x) (posY position-y) fontSize color)
+  (%draw-text text posX posY fontSize color))
+
+(defdraw draw-text-ex (font text (position position-2) fontSize spacing tint)
+  (%draw-text-ex font text position fontSize spacing tint))
+
+(defdraw draw-text-pro (font text (position position-2) origin rotation fontSize spacing tint)
+  (%draw-text-pro font text position origin rotation fontSize spacing tint))
+
+(defdraw draw-text-codepoint (font codepoint (position position-2) fontSize tint)
+  (%draw-text-codepoint font codepoint position fontSize tint))
+
+
+;;;; 3D WRAPPERS
+
+(defdraw draw-line-3d ((startPos position-3) (endPos position-3) color)
+  (%draw-line-3d startPos endPos color))
+
+(defdraw draw-point-3d ((position position-3) color)
+  (%draw-point-3d position color))
+
+(defdraw draw-circle-3d ((center position-3) radius rotationAxis rotationAngle color)
+  (%draw-circle-3d center radius rotationAxis rotationAngle color))
+
+(defdraw draw-triangle-3d ((v1 position-3) (v2 position-3) (v3 position-3) color)
+  (%draw-triangle-3d v1 v2 v3 color))
+
+(defdraw draw-cube ((position position-3) width height length color)
+  (%draw-cube position width height length color))
+
+(defdraw draw-cube-v ((position position-3) size color)
+  (%draw-cube-v position size color))
+
+(defdraw draw-cube-wires ((position position-3) width height length color)
+  (%draw-cube-wires position width height length color))
+
+(defdraw draw-cube-wires-v ((position position-3) size color)
+  (%draw-cube-wires-v position size color))
+
+(defdraw draw-sphere ((centerPos position-3) radius color)
+  (%draw-sphere centerPos radius color))
+
+(defdraw draw-sphere-ex ((centerPos position-3) radius rings slices color)
+  (%draw-sphere-ex centerPos radius rings slices color))
+
+(defdraw draw-sphere-wires ((centerPos position-3) radius rings slices color)
+  (%draw-sphere-wires centerPos radius rings slices color))
+
+(defdraw draw-cylinder ((position position-3) radiusTop radiusBottom height slices color)
+  (%draw-cylinder position radiusTop radiusBottom height slices color))
+
+(defdraw draw-cylinder-ex ((startPos position-3) (endPos position-3) startRadius endRadius sides color)
+  (%draw-cylinder-ex startPos endPos startRadius endRadius sides color))
+
+(defdraw draw-cylinder-wires ((position position-3) radiusTop radiusBottom height slices color)
+  (%draw-cylinder-wires position radiusTop radiusBottom height slices color))
+
+(defdraw draw-cylinder-wires-ex ((startPos position-3) (endPos position-3) startRadius endRadius sides color)
+  (%draw-cylinder-wires-ex startPos endPos startRadius endRadius sides color))
+
+(defdraw draw-capsule ((startPos position-3) (endPos position-3) radius slices rings color)
+  (%draw-capsule startPos endPos radius slices rings color))
+
+(defdraw draw-capsule-wires ((startPos position-3) (endPos position-3) radius slices rings color)
+  (%draw-capsule-wires startPos endPos radius slices rings color))
+
+(defdraw draw-plane ((centerPos position-3) size color)
+  (%draw-plane centerPos size color))
+
+(defdraw draw-model (model (position position-3) scale tint)
+  (%draw-model model position scale tint))
+
+(defdraw draw-model-ex (model (position position-3) rotationAxis rotationAngle scale tint)
+  (%draw-model-ex model position rotationAxis rotationAngle scale tint))
+
+(defdraw draw-model-wires (model (position position-3) scale tint)
+  (%draw-model-wires model position scale tint))
+
+(defdraw draw-model-wires-ex (model (position position-3) rotationAxis rotationAngle scale tint)
+  (%draw-model-wires-ex model position rotationAxis rotationAngle scale tint))
+
+(defdraw draw-billboard (camera texture (position position-3) scale tint)
+  (%draw-billboard camera texture position scale tint))
+
+(defdraw draw-billboard-rec (camera texture source (position position-3) size tint)
+  (%draw-billboard-rec camera texture source position size tint))
+
+(defdraw draw-billboard-pro (camera texture source (position position-3) up size origin rotation tint)
+  (%draw-billboard-pro camera texture source position up size origin rotation tint))
+
+
+;;;; NOT WRAPPED BY DEFDRAW
+;; These take arrays of points, Rectangle structs, or are not positions:
+;;   draw-line-strip, draw-triangle-fan, draw-triangle-strip,
+;;   draw-spline-linear, draw-spline-basis, draw-spline-catmull-rom,
+;;   draw-spline-bezier-quadratic, draw-spline-bezier-cubic,
+;;   draw-text-codepoints, draw-rectangle-rec, draw-rectangle-lines-ex,
+;;   draw-rectangle-rounded, draw-rectangle-rounded-lines,
+;;   draw-rectangle-rounded-lines-ex, draw-ray, draw-grid,
+;;   draw-mesh, draw-mesh-instanced, draw-bounding-box.
+
+
+
 ; PLAYGROUND
 
 ; Vector2 Vector2Add(Vector2 v1, Vector2 v2) // Add two vectors (v1 + v2)
@@ -5153,22 +5577,46 @@
 
 (plot #'(lambda(x) (* 2 x)) :from 1 :to 1000)
 
+(defun rad->deg (radians)
+  (* radians (/ 180.0 pi)))
+
 (with-window 800 800 "Plot"
-  (with-texture plot-texture 800 800
+  (with-texture plot-texture 1000 1000
     (with-texture-mode plot-texture
       (%draw-circle 0 0 100.0 :blue)
       (%draw-circle 0 799 100.0 :red)
       (%draw-circle 799 0 100.0 :yellow)
       (%draw-circle 799 799 100.0 :green)
-      (plot #'(lambda(x) x) :from 1 :to 1000))
+      (plot #'(lambda(x) x) :from 1 :to 1000)
+      (plot #'(lambda(x)(* 2 x)) :from 1 :to 1000)
+      (plot #'(lambda(x)(sin (rad->deg x))) :from 1 :to 1000))
     (loop until (%window-should-close)
-	  with camera = (make-camera-2d :offset (v! 0 0) :target (v! 0 799) :rotation 0.0 :zoom -1.0)
 	  doing
 	     (with-drawing
-	       (with-camera-2d camera
-		 (%clear-background :white)
-		 (%draw-circle 0 0 100.0 :blue)
-		 (%draw-circle 0 799 100.0 :red)
-		 (%draw-circle 799 0 100.0 :yellow)
-		 (%draw-circle 799 799 100.0 :green))))))
+	       (%clear-background :white)
+	       (%draw-texture (render-texture-texture plot-texture)
+			      200
+			      -400
+			      :white)))))
+
+(defmacro with-transform(matrix &body body)
+  (with-gensyms(old-matrix)
+    `(let* ((,old-matrix *draw-transform*))
+       (setf *draw-transform* (matrix* ,old-matrix ,matrix))
+       (unwind-protect (progn ,@body)
+	 (setf *draw-transform* ,old-matrix)))))
+       
+       
+  
+(with-window 800 800 "Plot"
+  (loop until (%window-should-close)
+	doing
+	   (with-drawing
+	     (%clear-background :white)
+	     (with-transform (translate-matrix! 0 800)
+	       (with-transform (scale-matrix! 1 -1)
+		 (draw-circle 0 0 100.0 :blue)
+		 (draw-circle 0 799 100.0 :red)
+		 (draw-circle 799 0 100.0 :yellow)
+		 (draw-circle 799 799 100.0 :green))))))
 
