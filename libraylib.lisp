@@ -1,6 +1,3 @@
-(ql:quickload 'cffi)
-(ql:quickload 'cffi-libffi)
-
 (cffi:define-foreign-library libraylib
     (:unix (:default "/usr/local/lib/libraylib"))
     (t (:default "libraylib")))
@@ -230,6 +227,14 @@
                   for accessor = (format nil "~a-~a" type slot)
                   collecting `(,binding (,(intern accessor (symbol-package type)) ,obj-var)))
          ,@body))))
+
+(defmacro with-transform(matrix &body body)
+  (with-gensyms(old-matrix)
+    `(let* ((,old-matrix *draw-transform*))
+       (setf *draw-transform* (matrix* ,old-matrix ,matrix))
+       (unwind-protect (progn ,@body)
+	 (setf *draw-transform* ,old-matrix)))))
+
 
 ;;;; ENUMS
 
@@ -5561,30 +5566,6 @@ Unannotated args pass through unchanged."
 
 (%vector2-add (v! 1 1) (v! 2 2))
 
-(with-window 800 600 "Window"
-  (%set-target-fps 60)
-  (with-texture tex 300 300
-    (with-texture-mode tex
-      (%clear-background :pink)
-      (%draw-rectangle 0 0 150 150 :red))
-    (loop until (%window-should-close)
-	  with position-x = 0
-	  with position-y = 0
-	  doing
-	     (with-mouse ((:left :down left-down?)
-			  (:position :x x-pos :y y-pos)
-			  (:delta :x delta-x :y delta-y))
-	       (when left-down?
-		 (setf position-x (truncate x-pos)
-		       position-y (truncate y-pos)))
-	       (with-drawing 
-		 (%clear-background :raywhite)
-		 (%draw-fps 10 10)
-		 (%draw-texture (render-texture-texture tex)
-				position-x
-				position-y
-				:white))))))
-
 (defun plot(function &key from to (scale-x 1) (scale-y 1))
   (loop for i from from below to
 	for x = (round (* i scale-x))
@@ -5592,46 +5573,12 @@ Unannotated args pass through unchanged."
 	doing
 	   (%draw-pixel x y :blue)))
 
-(%close-window)
-
-(let ((gen (make-prime-generator)))
-  (funcall gen 10000)
-  (plot #'(lambda(x) (funcall gen x)) :from 1 :to 10000 :scale-x 799/9999 :scale-y 799/104729))
-
-(plot #'(lambda(x) (* 2 x)) :from 1 :to 1000)
-
 (defun rad->deg (radians)
   (* radians (/ 180.0 pi)))
 
 (defun deg->rad (degrees)
   (* degrees (/ pi 180.0)))
 
-(with-window 800 800 "Plot"
-  (with-texture plot-texture 1000 1000
-    (with-texture-mode plot-texture
-      (%draw-circle 0 0 100.0 :blue)
-      (%draw-circle 0 799 100.0 :red)
-      (%draw-circle 799 0 100.0 :yellow)
-      (%draw-circle 799 799 100.0 :green)
-      (plot #'(lambda(x) x) :from 1 :to 1000)
-      (plot #'(lambda(x)(* 2 x)) :from 1 :to 1000)
-      (plot #'(lambda(x)(sin (rad->deg x))) :from 1 :to 1000))
-    (loop until (%window-should-close)
-	  doing
-	     (with-drawing
-	       (%clear-background :white)
-	       (%draw-texture (render-texture-texture plot-texture)
-			      200
-			      -400
-			      :white)))))
-
-(defmacro with-transform(matrix &body body)
-  (with-gensyms(old-matrix)
-    `(let* ((,old-matrix *draw-transform*))
-       (setf *draw-transform* (matrix* ,old-matrix ,matrix))
-       (unwind-protect (progn ,@body)
-	 (setf *draw-transform* ,old-matrix)))))
-       
        
 (with-window 800 800 "Plot"
   (%set-target-fps 60)
@@ -5694,3 +5641,5 @@ Unannotated args pass through unchanged."
 				  ((not (zerop wheel-move)) "Scrolling")
 				  (t ""))
 			    350	400 25 :blue))))))
+
+(v! 1 2 3)
