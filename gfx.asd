@@ -6,7 +6,8 @@
 
   :depends-on
   (:cffi
-   :cffi-libffi)
+   :cffi-libffi
+   :lparallel)
 
   :components
   ((:file "libraylib")
