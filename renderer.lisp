@@ -6,22 +6,23 @@
           (safety 3)
           (space 0)))
 
-(defstruct my-camera
+(defstruct camera
   position
   looking)
 
+(defparameter *bg* (color!))
+(defparameter *fg* (color! 0 0 0))
 (defparameter *debug-points* nil)
 (defparameter *framebuffer-height* 500)
 (defparameter *framebuffer-width* 500)
 (defparameter *points* (make-array 2000 :adjustable t :fill-pointer 0))
-(defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element #(255 255 255)))
-(defparameter *camera* (make-my-camera :position (v! -5.0 0.0 0.0)
+(defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element *bg*))
+(defparameter *camera* (make-camera :position (v! -5.0 0.0 0.0)
 				       :looking (v! 1.0 0.0 0.0)))
 (defparameter *focal-length* 866.0)
 
 (defun pixel(x y color)
-  (destructuring-bind (r g b) color
-    (setf (aref *framebuffer* x y) (vector r g b))))
+  (setf (aref *framebuffer* x y) color))
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
@@ -33,10 +34,7 @@
 		   (%clear-background :white)
 		   (dotimes (x-index *framebuffer-width*)
 		     (dotimes (y-index *framebuffer-height*)
-		       (let* ((item (aref *framebuffer* x-index y-index))
-			      (c (color! (aref item 0)
-				     (aref item 1)
-				     (aref item 2))))
+		       (let ((c (aref *framebuffer* x-index y-index)))
 			 (draw-pixel x-index y-index c)))))))
 	(repaint)
 	(loop until (%window-should-close) doing
@@ -46,38 +44,39 @@
 		      (:d :down right)
 		      (:left_control :down down)
 		      (:space :down up))
-	    (when forward
-	      (incf (vector3-x (my-camera-position *camera*)) 1))
-	    (when backward
-	      (decf (vector3-x (my-camera-position *camera*)) 1))
-	    (when up
-	      (incf (vector3-y (my-camera-position *camera*)) 1))
-	    (when down	   
-	      (decf (vector3-y (my-camera-position *camera*)) 1))
-	    (when right
-	      (incf (vector3-z (my-camera-position *camera*)) 1))
-	    (when left	   
-	      (decf (vector3-z (my-camera-position *camera*)) 1))
-	    (when (or forward backward left right up down)
-	      (repaint))
+	    (with-members (position) *camera* camera
+	      (when forward
+		(incf (vector3-x position) 1))
+	      (when backward
+		(decf (vector3-x position) 1))
+	      (when up
+		(incf (vector3-y position) 1))
+	      (when down	   
+		(decf (vector3-y position) 1))
+	      (when right
+		(incf (vector3-z position) 1))
+	      (when left	   
+		(decf (vector3-z position) 1))
+	      (when (or forward backward left right up down)
+		(repaint)))
 	    (with-drawing
 	      (%clear-background :white)
-		(with-math-coordinates (0 *framebuffer-height*)
-		  (%draw-texture (render-texture-texture framebuffer)
-				 0
-				 0
-				 :white))
-		(draw-fps 10 10))))))))
+	      (with-math-coordinates (0 *framebuffer-height*)
+		(%draw-texture (render-texture-texture framebuffer)
+			       0
+			       0
+			       :white))
+	      (draw-fps 10 10))))))))
 
 (display #'(lambda()
 	     (loop
 	       initially (dotimes (x *framebuffer-width*)
 			   (dotimes (y *framebuffer-height*)
-			     (setf (aref *framebuffer* x y) #(255 255 255))))
-		 initially (setf *debug-points* nil)
+			     (setf (aref *framebuffer* x y) *bg*)))
+;		 initially (setf *debug-points* nil)
 	       for point across *points*
 	       for new-point = (with-members
-				   (x y z) (my-camera-position *camera*) vector3
+				   (x y z) (camera-position *camera*) vector3
 				 (transform-vector-3 point (translate-matrix! (- x) (- y) (- z))))
 	       for x = (vector3-x new-point)
 	       for y = (vector3-y new-point)
@@ -89,19 +88,11 @@
 	       doing
 		  (when (and (<= 0 screen-x (1- *framebuffer-width*))
 			     (<= 0 screen-y (1- *framebuffer-height*)))
-		    (push (list projected-z projected-y) *debug-points*)
-		    (pixel screen-x screen-y '(0 0 0)))
-	       finally
-		  (print (length *debug-points*)))))
+;		    (push (list projected-z projected-y) *debug-points*)
+		    (pixel screen-x screen-y *fg*)))))
+;	       finally
+;		  (print (length *debug-points*)))))
 
-;(transform-vector-3 point
-;		     (matrix*
-;		      (translate-matrix! 0 (truncate (/ *framebuffer-height* 2))
-;			  (truncate (/ *framebuffer-width* 2)))
-;		      (matrix*
-;		       (scale-matrix! 100 100 100)
-;		       (translate-matrix! (- x) (- y) (- z))))))
-;
 	 
 ;; load vertices from file
 (with-open-file (obj-stream "african_head.obj")
