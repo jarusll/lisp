@@ -15,11 +15,39 @@
 (defparameter *debug-points* nil)
 (defparameter *framebuffer-height* 500)
 (defparameter *framebuffer-width* 500)
-(defparameter *points* (make-array 2000 :adjustable t :fill-pointer 0))
+(defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
+(defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element *bg*))
 (defparameter *camera* (make-camera :position (v! -5.0 0.0 0.0)
 				       :looking (v! 1.0 0.0 0.0)))
 (defparameter *focal-length* 866.0)
+
+;; load vertices from file
+(with-open-file (obj-stream "african_head.obj")
+  (setf (fill-pointer *vertices*) 0)
+  (setf (fill-pointer *faces*) 0)
+  (loop for line = (read-line obj-stream nil)
+	while line
+	doing
+	   (when (<= 2 (length line))
+	     (cond ((string= "v " line :end1 2 :end2 2)
+		    (with-input-from-string (s (subseq line 2))
+		      (let ((x (read s))
+			    (y (read s))
+			    (z (read s)))
+			(vector-push-extend (v! x y z) *vertices*))))
+		   ((string= "f " line :end1 2 :end2 2)
+		    (with-input-from-string (s (subseq line 2))
+		      (vector-push-extend (apply #'make-vector3
+						 (loop repeat 3
+						       for v-vt-vn = (symbol-name (read s))
+						       for axis in '(:x :y :z)
+						       appending
+						       (list
+							axis
+							(parse-integer v-vt-vn
+								       :junk-allowed t))))
+					  *faces*)))))))
 
 (defun pixel(x y color)
   (setf (aref *framebuffer* x y) color))
@@ -46,17 +74,17 @@
 		      (:space :down up))
 	    (with-members (position) *camera* camera
 	      (when forward
-		(incf (vector3-x position) 1))
+		(incf (vector3-x position) 0.25))
 	      (when backward
-		(decf (vector3-x position) 1))
+		(decf (vector3-x position) 0.25))
 	      (when up
-		(incf (vector3-y position) 1))
+		(incf (vector3-y position) 0.25))
 	      (when down	   
-		(decf (vector3-y position) 1))
+		(decf (vector3-y position) 0.25))
 	      (when right
-		(incf (vector3-z position) 1))
+		(incf (vector3-z position) 0.25))
 	      (when left	   
-		(decf (vector3-z position) 1))
+		(decf (vector3-z position) 0.25))
 	      (when (or forward backward left right up down)
 		(repaint)))
 	    (with-drawing
@@ -74,7 +102,7 @@
 			   (dotimes (y *framebuffer-height*)
 			     (setf (aref *framebuffer* x y) *bg*)))
 ;		 initially (setf *debug-points* nil)
-	       for point across *points*
+	       for point across *vertices*
 	       for new-point = (with-members
 				   (x y z) (camera-position *camera*) vector3
 				 (transform-vector-3 point (translate-matrix! (- x) (- y) (- z))))
@@ -94,18 +122,6 @@
 ;		  (print (length *debug-points*)))))
 
 	 
-;; load vertices from file
-(with-open-file (obj-stream "african_head.obj")
-  (setf (fill-pointer *points*) 0)
-  (loop for line = (read-line obj-stream nil)
-	while (and line (<= 2 (length line)))
-	doing
-	   (when (string= "v " line :end2 2)
-	     (with-input-from-string (s (subseq line 2))
-	       (let ((x (read s))
-		     (y (read s))
-		     (z (read s)))
-		 (vector-push-extend (v! x y z) *points*))))))
 
 (%close-window)
 
