@@ -10,22 +10,24 @@
   position
   looking)
 
-(defparameter *bg* (color!))
-(defparameter *fg* (color! 0 0 0))
+(defparameter *bg* (color! 255 255 255 255))
+(defparameter *fg* (color! 0 0 0 255))
 (defparameter *debug-points* nil)
 (defparameter *framebuffer-height* 500)
 (defparameter *framebuffer-width* 500)
 (defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
+(defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element *bg*))
 (defparameter *camera* (make-camera :position (v! -5.0 0.0 0.0)
 				       :looking (v! 1.0 0.0 0.0)))
 (defparameter *focal-length* 866.0)
 
-;; load vertices from file
+;; load vertices & faces from file
 (with-open-file (obj-stream "african_head.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
+  (setf (fill-pointer *projected-vertices*) 0)
   (loop for line = (read-line obj-stream nil)
 	while line
 	doing
@@ -36,7 +38,7 @@
 			    (y (read s))
 			    (z (read s)))
 			(vector-push-extend (v! x y z) *vertices*))))
-		   ((string= "f " line :end1 2 :end2 2)
+		   ((string= "f " line :end1 2 :end2 2) ; collect only the vertex indices for faces
 		    (with-input-from-string (s (subseq line 2))
 		      (vector-push-extend (apply #'make-vector3
 						 (loop repeat 3
@@ -45,12 +47,41 @@
 						       appending
 						       (list
 							axis
-							(parse-integer v-vt-vn
+							(parse-integer v-vt-vn 
 								       :junk-allowed t))))
 					  *faces*)))))))
 
+(defun transform-vector-3 (v m)
+  "Transform a Vector3 by *draw-transform* (treated as w = 1)."
+  (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14) m matrix
+    (make-vector3
+     :x (+ (* m0 (vector3-x v)) (* m4 (vector3-y v)) (* m8 (vector3-z v)) m12)
+     :y (+ (* m1 (vector3-x v)) (* m5 (vector3-y v)) (* m9 (vector3-z v)) m13)
+     :z (+ (* m2 (vector3-x v)) (* m6 (vector3-y v)) (* m10 (vector3-z v)) m14))))
+
 (defun pixel(x y color)
-  (setf (aref *framebuffer* x y) color))
+  (when (and (<= 0 x (1- *framebuffer-width*))
+	     (<= 0 y (1- *framebuffer-height*)))
+    (setf (aref *framebuffer* x y) color)))
+
+(defun bresenham (x0 y0 x1 y1 plot)
+  (declare (type fixnum x0 y0 x1 y1))
+  (let* ((dx (abs (- x1 x0)))
+         (sx (if (< x0 x1) 1 -1))
+         (dy (- (abs (- y1 y0))))
+         (sy (if (< y0 y1) 1 -1))
+         (err (+ dx dy)))
+    (loop
+      (funcall plot x0 y0)
+      (when (and (= x0 x1) (= y0 y1))
+        (return))
+      (let ((e2 (* 2 err)))
+        (when (>= e2 dy)
+          (incf err dy)
+          (incf x0 sx))
+        (when (<= e2 dx)
+          (incf err dx)
+          (incf y0 sy))))))
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
@@ -101,8 +132,8 @@
 	       initially (dotimes (x *framebuffer-width*)
 			   (dotimes (y *framebuffer-height*)
 			     (setf (aref *framebuffer* x y) *bg*)))
-;		 initially (setf *debug-points* nil)
 	       for point across *vertices*
+	       for index from 1
 	       for new-point = (with-members
 				   (x y z) (camera-position *camera*) vector3
 				 (transform-vector-3 point (translate-matrix! (- x) (- y) (- z))))
@@ -114,23 +145,26 @@
 	       for screen-x = (truncate (+ projected-z (/ *framebuffer-width* 2)))
 	       for screen-y = (truncate (+ projected-y (/ *framebuffer-height* 2)))
 	       doing
-		  (when (and (<= 0 screen-x (1- *framebuffer-width*))
-			     (<= 0 screen-y (1- *framebuffer-height*)))
-;		    (push (list projected-z projected-y) *debug-points*)
-		    (pixel screen-x screen-y *fg*)))))
-;	       finally
-;		  (print (length *debug-points*)))))
+		  (pixel screen-x screen-y *fg*)
+		  (setf (aref *projected-vertices* index)
+			(make-vector2 :x screen-x :y screen-y)))
+	     (loop for face across *faces*
+		   collecting
+		   (with-members (x y z) face vector3
+		     (let ((start (aref *projected-vertices* x))
+			   (mid (aref *projected-vertices* y))
+			   (end (aref *projected-vertices* z)))
+		       (loop for (p0 p1) in
+			     `((,start ,mid)
+			       (,mid ,end)
+			       (,end ,start))
+			     doing
+				(with-members ((x x0) (y y0)) p0 vector2
+				  (with-members ((x x1) (y y1)) p1 vector2
+				    (bresenham x0 y0 x1 y1 #'(lambda(x-prime y-prime)
+							       (pixel x-prime y-prime *fg*)))))))))))
 
-	 
+			      
 
-(%close-window)
-
-(defun transform-vector-3 (v m)
-  "Transform a Vector3 by *draw-transform* (treated as w = 1)."
-  (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14) m matrix
-    (make-vector3
-     :x (+ (* m0 (vector3-x v)) (* m4 (vector3-y v)) (* m8 (vector3-z v)) m12)
-     :y (+ (* m1 (vector3-x v)) (* m5 (vector3-y v)) (* m9 (vector3-z v)) m13)
-     :z (+ (* m2 (vector3-x v)) (* m6 (vector3-y v)) (* m10 (vector3-z v)) m14))))
-
+; (%close-window)
 
