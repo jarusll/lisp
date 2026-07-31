@@ -17,7 +17,7 @@
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element #(255 255 255)))
 (defparameter *camera* (make-my-camera :position (v! -5.0 0.0 0.0)
 				       :looking (v! 1.0 0.0 0.0)))
-(defparameter *focal-length* 250.0)
+(defparameter *focal-length* 866.0)
 
 (defun pixel(x y color)
   (destructuring-bind (r g b) color
