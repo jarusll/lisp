@@ -8,7 +8,8 @@
 
 (defstruct camera
   position
-  looking)
+  yaw
+  pitch)
 
 (defparameter *bg* (color! 255 255 255 255))
 (defparameter *fg* (color! 0 0 0 255))
@@ -20,8 +21,10 @@
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element *bg*))
 (defparameter *camera* (make-camera :position (v! -5.0 0.0 0.0)
-				       :looking (v! 1.0 0.0 0.0)))
+				    :yaw 0.0
+				    :pitch 0.0))
 (defparameter *focal-length* 866.0)
+(defparameter *mouse-sensitivity* 0.01)
 
 ;; load vertices & faces from file
 (with-open-file (obj-stream "african_head.obj")
@@ -86,6 +89,11 @@
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
     (%set-target-fps 60)
+    (%disable-cursor)
+    (with-members (yaw pitch) *camera* camera
+      (setf yaw 0.0
+	    pitch 0.0))
+    
     (with-texture framebuffer *framebuffer-width* *framebuffer-height*
       (labels ((repaint()
 		 (funcall painter)
@@ -116,8 +124,14 @@
 		(incf (vector3-z position) 0.25))
 	      (when left	   
 		(decf (vector3-z position) 0.25))
-	      (when (or forward backward left right up down)
-		(repaint)))
+	      (with-mouse ((:delta :x delta-x :y delta-y))
+		(with-members(yaw pitch) *camera* camera
+		  (incf yaw (* delta-x *mouse-sensitivity*))
+		  (wrapf yaw 360.0)
+		  (incf pitch (* delta-y *mouse-sensitivity*))
+		  (clampf pitch 90.0 -90.0))
+		(when (or forward backward left right up down (not (zerop delta-x)) (not (zerop delta-y)))
+		  (repaint)))))
 	    (with-drawing
 	      (%clear-background :white)
 	      (with-math-coordinates (0 *framebuffer-height*)
@@ -125,7 +139,9 @@
 			       0
 			       0
 			       :white))
-	      (draw-fps 10 10))))))))
+	      (draw-fps 10 10)
+	      (with-members (yaw pitch) *camera* camera
+		(draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 50 100 20 *fg*))))))))
 
 (display #'(lambda()
 	     (loop
@@ -136,7 +152,13 @@
 	       for index from 1
 	       for new-point = (with-members
 				   (x y z) (camera-position *camera*) vector3
-				 (transform-vector-3 point (translate-matrix! (- x) (- y) (- z))))
+				 (with-members (yaw pitch) *camera* camera
+				   (transform-vector-3 point
+						       (reduce #'matrix*
+							       (list
+								(rotate-z-matrix! pitch)
+								(rotate-y-matrix! (- yaw))
+								(translate-matrix! (- x) (- y) (- z)))))))
 	       for x = (vector3-x new-point)
 	       for y = (vector3-y new-point)
 	       for z = (vector3-z new-point)
@@ -146,23 +168,23 @@
 	       for screen-y = (truncate (+ projected-y (/ *framebuffer-height* 2)))
 	       doing
 		  (pixel screen-x screen-y *fg*)
-		  (setf (aref *projected-vertices* index)
+		  (setf (aref *projected-vertices* index) ; save the projection
 			(make-vector2 :x screen-x :y screen-y)))
 	     (loop for face across *faces*
-		   collecting
-		   (with-members (x y z) face vector3
-		     (let ((start (aref *projected-vertices* x))
-			   (mid (aref *projected-vertices* y))
-			   (end (aref *projected-vertices* z)))
-		       (loop for (p0 p1) in
-			     `((,start ,mid)
-			       (,mid ,end)
-			       (,end ,start))
-			     doing
-				(with-members ((x x0) (y y0)) p0 vector2
-				  (with-members ((x x1) (y y1)) p1 vector2
-				    (bresenham x0 y0 x1 y1 #'(lambda(x-prime y-prime)
-							       (pixel x-prime y-prime *fg*)))))))))))
+		   doing
+		      (with-members ((x v1) (y v2) (z v3)) face vector3
+			(let ((start (aref *projected-vertices* v1))
+			      (mid (aref *projected-vertices* v2))
+			      (end (aref *projected-vertices* v3)))
+			  (loop for (p0 p1) in
+				`((,start ,mid)
+				  (,mid ,end)
+				  (,end ,start))
+				doing
+				   (with-members ((x x0) (y y0)) p0 vector2
+				     (with-members ((x x1) (y y1)) p1 vector2
+				       (bresenham x0 y0 x1 y1 #'(lambda(x-prime y-prime)
+								  (pixel x-prime y-prime *fg*)))))))))))
 
 			      
 

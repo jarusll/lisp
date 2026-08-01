@@ -3,6 +3,27 @@
 
 (in-package #:gfx)
 
+;;;; UTILS
+
+(defun clamp (value max &optional (min 0))
+  (min max
+       (max min value)))
+
+(defun deg->rad (degrees)
+  (* degrees (/ pi 180.0)))
+
+(defun wrap-around-zero(value max &optional (min 0))
+  (wrap value min max))
+
+(defun wrap (value min &optional (max 0))
+  (+ min
+     (mod (- value min)
+          (- max min))))
+
+(defmacro clampf (place max &optional (min 0))
+  `(setf ,place
+         (clamp ,place ,max ,min)))
+
 (define-foreign-library libraylib
     (:unix (:default "/usr/local/lib/libraylib"))
     (t (:default "libraylib")))
@@ -14,6 +35,8 @@
     `(let ,(loop for sym in symbols collect `(,sym (gensym)))
         ,@body))
 
+(defmacro wrapf(place max &optional (min 0))
+  `(setf ,place (wrap ,place ,min ,max)))
 
 (defmacro with-members(members obj type &body body)
   (with-gensyms(obj-var)
@@ -225,6 +248,26 @@
     `(let ((,radian-value (deg->rad ,deg)))
        (matrix! (((cos ,radian-value) (- (sin ,radian-value)))
 		 ((sin ,radian-value) (cos ,radian-value)))))))
+
+(defmacro rotate-z-matrix!(deg)
+  (with-gensyms(radian-value)
+    `(let ((,radian-value (deg->rad ,deg)))
+       (matrix! (((cos ,radian-value) (- (sin ,radian-value)))
+		 ((sin ,radian-value) (cos ,radian-value)))))))
+
+(defmacro rotate-y-matrix!(deg)
+  (with-gensyms(radian-value)
+    `(let ((,radian-value (deg->rad ,deg)))
+       (matrix! (((cos ,radian-value) 0  (- (sin ,radian-value)))
+		 (0 1 0)
+		 ((sin ,radian-value) 0 (cos ,radian-value)))))))
+
+(defmacro rotate-x-matrix!(deg)
+  (with-gensyms(radian-value)
+    `(let ((,radian-value (deg->rad ,deg)))
+       (matrix! ((1 0 0)
+		 (0 (cos ,radian-value) (- (sin ,radian-value)))
+		 (0 (sin ,radian-value) (cos ,radian-value)))))))
 
 (defmacro with-transform(matrix &body body)
   (with-gensyms(old-matrix)
