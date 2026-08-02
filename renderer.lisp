@@ -11,20 +11,24 @@
   yaw
   pitch)
 
-(defparameter *bg* (color! 255 255 255 255))
-(defparameter *fg* (color! 0 0 0 255))
+(defparameter +camera-looking-initial+ (v! 1.0 0.0 0.0))
+(defparameter +bg+ (color! 255 255 255 255))
+(defparameter +fg+ (color! 0 0 0 255))
+(defparameter +world-up+ (v! 0.0 1.0 0.0))
+
 (defparameter *debug-points* nil)
 (defparameter *framebuffer-height* 500)
 (defparameter *framebuffer-width* 500)
 (defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
-(defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element *bg*))
+(defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+))
 (defparameter *camera* (make-camera :position (v! -5.0 0.0 0.0)
 				    :yaw 0.0
 				    :pitch 0.0))
 (defparameter *focal-length* 866.0)
 (defparameter *mouse-sensitivity* 0.01)
+(defparameter *camera-looking* +camera-looking-initial+)
 
 ;; load vertices & faces from file
 (with-open-file (obj-stream "african_head.obj")
@@ -141,13 +145,13 @@
 			       :white))
 	      (draw-fps 10 10)
 	      (with-members (yaw pitch) *camera* camera
-		(draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 50 100 20 *fg*))))))))
+		(draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 50 100 20 +fg+))))))))
 
 (display #'(lambda()
 	     (loop
 	       initially (dotimes (x *framebuffer-width*)
 			   (dotimes (y *framebuffer-height*)
-			     (setf (aref *framebuffer* x y) *bg*)))
+			     (setf (aref *framebuffer* x y) +bg+)))
 	       for point across *vertices*
 	       for index from 1
 	       for new-point = (with-members
@@ -167,7 +171,7 @@
 	       for screen-x = (truncate (+ projected-z (/ *framebuffer-width* 2)))
 	       for screen-y = (truncate (+ projected-y (/ *framebuffer-height* 2)))
 	       doing
-		  (pixel screen-x screen-y *fg*)
+		  (pixel screen-x screen-y +fg+)
 		  (setf (aref *projected-vertices* index) ; save the projection
 			(make-vector2 :x screen-x :y screen-y)))
 	     (loop for face across *faces*
@@ -184,7 +188,7 @@
 				   (with-members ((x x0) (y y0)) p0 vector2
 				     (with-members ((x x1) (y y1)) p1 vector2
 				       (bresenham x0 y0 x1 y1 #'(lambda(x-prime y-prime)
-								  (pixel x-prime y-prime *fg*)))))))))))
+								  (pixel x-prime y-prime +fg+)))))))))))
 
 			      
 
