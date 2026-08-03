@@ -57,6 +57,40 @@
             (3 `(make-vector3 :x ,x :y ,y :z ,z))
             (4 `(make-vector4 :x ,x :y ,y :z ,z :w ,w)))))
 
+(defgeneric vector+(a b))
+(defgeneric vector-(a b))
+(defgeneric vector*(a b))
+(defgeneric dot(a b))
+
+(defmacro defvector-ops(v-type v-members) ; vector3 (x y z)
+  (let* ((typename (symbol-name v-type)) ; v-type = vector3, typename = "VECTOR3"
+	 (make-type-symbol (intern (concatenate 'string "MAKE-" typename))) ; "MAKE-VECTOR3"
+	 (members-accessors (loop for member in v-members ; ((:x vector3-x)...)
+				collecting
+				(list (intern (symbol-name member) :keyword)
+				      (intern (concatenate 'string typename "-" (symbol-name member)))))))
+    `(progn
+       (defmethod vector+((a ,v-type) (b ,v-type))
+	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
+				    appending `(,member (+ (,accessor a)
+							   (,accessor b))))))
+       (defmethod vector-((a ,v-type) (b ,v-type))
+	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
+				    appending `(,member (- (,accessor a)
+							   (,accessor b))))))
+       (defmethod vector*((a number) (v ,v-type))
+	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
+				    appending `(,member (* a
+							   (,accessor v))))))
+       (defmethod dot((a ,v-type) (b ,v-type))
+	 (+ ,@(loop for (member accessor) in members-accessors
+		    collecting `(* (,accessor a)
+				   (,accessor b))))))))
+
+
+(defvector-ops vector2 (x y))
+(defvector-ops vector3 (x y z))
+(defvector-ops vector4 (x y z w))
 
 (defmacro with-window(width height title &body body)
   `(progn
