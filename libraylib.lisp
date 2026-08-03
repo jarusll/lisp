@@ -65,73 +65,6 @@
 (defgeneric reduce-dimension(v axis))
 (defgeneric magnitude (v))
 
-(defmethod reduce-dimension((v vector2) axis)
-  (with-members (x y) v vector2
-    (ecase axis
-      (:x y)
-      (:y x))))
-
-(defmethod reduce-dimension((v vector3) axis)
-  (with-members (x y z) v vector3
-    (ecase axis
-      (:x (make-vector2 :x y :y z))
-      (:y (make-vector2 :x x :y z))
-      (:z (make-vector2 :x x :y y)))))
-
-(defmethod reduce-dimension((v vector4) axis)
-  (with-members (x y z w) v vector4
-    (ecase axis
-      (:x (make-vector3 :x y :y z :z w))
-      (:y (make-vector3 :x x :y z :z w))
-      (:z (make-vector3 :x x :y y :z w))
-      (:w (make-vector3 :x x :y y :z z)))))
-
-(defun det2(v2-a v2-b)
-  (with-members ((x a) (y b)) v2-a vector2
-    (with-members ((x c) (y d)) v2-b vector2
-      (- (* a d) (* b c)))))
-
-(defmethod cross((v1 vector3) (v2 vector3))
-  (v!
-   (det2 (reduce-dimension v1 :x) (reduce-dimension v2 :x))
-   (- (det2 (reduce-dimension v1 :y) (reduce-dimension v2 :y)))
-   (det2 (reduce-dimension v1 :z) (reduce-dimension v2 :z))))
-
-(defmacro defvector-ops(v-type v-members) ; vector3 (x y z)
-  (let* ((typename (symbol-name v-type)) ; v-type = vector3, typename = "VECTOR3"
-	 (make-type-symbol (intern (concatenate 'string "MAKE-" typename))) ; "MAKE-VECTOR3"
-	 (members-accessors (loop for member in v-members ; ((:x vector3-x)...)
-				collecting
-				(list (intern (symbol-name member) :keyword)
-				      (intern (concatenate 'string typename "-" (symbol-name member)))))))
-    `(progn
-       (defmethod vector+((a ,v-type) (b ,v-type))
-	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
-				    appending `(,member (+ (,accessor a)
-							   (,accessor b))))))
-       (defmethod vector-((a ,v-type) (b ,v-type))
-	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
-				    appending `(,member (- (,accessor a)
-							   (,accessor b))))))
-       (defmethod vector*((a number) (v ,v-type))
-	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
-				    appending `(,member (* a
-							   (,accessor v))))))
-       (defmethod dot((a ,v-type) (b ,v-type))
-	 (+ ,@(loop for (member accessor) in members-accessors
-		    collecting `(* (,accessor a)
-				   (,accessor b)))))
-       (defmethod magnitude ((v ,v-type))
-	 (sqrt (dot v v)))
-       (defmethod normalize ((v ,v-type))
-	 (vector* (/ (magnitude v)) v)))))
-
-
-
-(defvector-ops vector2 (x y))
-(defvector-ops vector3 (x y z))
-(defvector-ops vector4 (x y z w))
-
 (defmacro with-window(width height title &body body)
   `(progn
      (%init-window ,width ,height ,title)
@@ -5719,3 +5652,71 @@ Unannotated args pass through unchanged."
 					 (0 1 0 0)
 					 (0 0 1 0)
 					 (0 0 0 1))))
+
+(defmethod reduce-dimension((v vector2) axis)
+  (with-members (x y) v vector2
+    (ecase axis
+      (:x y)
+      (:y x))))
+
+(defmethod reduce-dimension((v vector3) axis)
+  (with-members (x y z) v vector3
+    (ecase axis
+      (:x (make-vector2 :x y :y z))
+      (:y (make-vector2 :x x :y z))
+      (:z (make-vector2 :x x :y y)))))
+
+(defmethod reduce-dimension((v vector4) axis)
+  (with-members (x y z w) v vector4
+    (ecase axis
+      (:x (make-vector3 :x y :y z :z w))
+      (:y (make-vector3 :x x :y z :z w))
+      (:z (make-vector3 :x x :y y :z w))
+      (:w (make-vector3 :x x :y y :z z)))))
+
+(defun det2(v2-a v2-b)
+  (with-members ((x a) (y b)) v2-a vector2
+    (with-members ((x c) (y d)) v2-b vector2
+      (- (* a d) (* b c)))))
+
+(defmethod cross((v1 vector3) (v2 vector3))
+  (v!
+   (det2 (reduce-dimension v1 :x) (reduce-dimension v2 :x))
+   (- (det2 (reduce-dimension v1 :y) (reduce-dimension v2 :y)))
+   (det2 (reduce-dimension v1 :z) (reduce-dimension v2 :z))))
+
+(defmacro defvector-ops(v-type v-members) ; vector3 (x y z)
+  (let* ((typename (symbol-name v-type)) ; v-type = vector3, typename = "VECTOR3"
+	 (make-type-symbol (intern (concatenate 'string "MAKE-" typename))) ; "MAKE-VECTOR3"
+	 (members-accessors (loop for member in v-members ; ((:x vector3-x)...)
+				collecting
+				(list (intern (symbol-name member) :keyword)
+				      (intern (concatenate 'string typename "-" (symbol-name member)))))))
+    `(progn
+       (defmethod vector+((a ,v-type) (b ,v-type))
+	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
+				    appending `(,member (+ (,accessor a)
+							   (,accessor b))))))
+       (defmethod vector-((a ,v-type) (b ,v-type))
+	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
+				    appending `(,member (- (,accessor a)
+							   (,accessor b))))))
+       (defmethod vector*((a number) (v ,v-type))
+	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
+				    appending `(,member (* a
+							   (,accessor v))))))
+       (defmethod dot((a ,v-type) (b ,v-type))
+	 (+ ,@(loop for (member accessor) in members-accessors
+		    collecting `(* (,accessor a)
+				   (,accessor b)))))
+       (defmethod magnitude ((v ,v-type))
+	 (sqrt (dot v v)))
+       (defmethod normalize ((v ,v-type))
+	 (vector* (/ (magnitude v)) v)))))
+
+
+
+(defvector-ops vector2 (x y))
+(defvector-ops vector3 (x y z))
+(defvector-ops vector4 (x y z w))
+

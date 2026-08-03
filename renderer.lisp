@@ -18,6 +18,7 @@
 (defparameter +fg+ (color! 0 0 0 255))
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
 (defparameter *camera-speed* 5)
+(defparameter +near-plane+ 0.01)
 
 (defparameter *debug-points* nil)
 (defparameter *framebuffer-height* 600)
@@ -34,7 +35,7 @@
 (defparameter *camera-looking* +camera-forward-initial+)
 
 ;; load vertices & faces from file
-(with-open-file (obj-stream "cube.obj")
+(with-open-file (obj-stream "african_head.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
   (setf (fill-pointer *projected-vertices*) 0)
@@ -93,6 +94,17 @@
           (incf err dx)
           (incf y0 sy))))))
 
+(defun camera-basis()
+  (with-members (yaw pitch) *camera* camera
+    (let* ((yaw-rotated-initial (normalize
+				 (transform-vector-3 +camera-forward-initial+
+						     (rotate-y-matrix! yaw))))
+	   (right-direction (normalize
+			     (cross yaw-rotated-initial +world-up+)))
+	   (forward-direction (rotate-vector-about-axis yaw-rotated-initial right-direction (- pitch)))
+	   (up-direction (normalize (cross right-direction forward-direction))))
+      (values forward-direction right-direction up-direction))))
+
 (defun camera-forward()
   (nth-value 0 (camera-basis)))
 
@@ -101,17 +113,6 @@
 
 (defun camera-right()
   (nth-value 1 (camera-basis)))
-
-(defun camera-basis()
-  (with-members (yaw pitch) *camera* camera
-    (let* ((yaw-rotated-initial (normalize
-				 (transform-vector-3 +camera-forward-initial+
-						     (rotate-y-matrix! (- yaw)))))
-	   (right-direction (normalize
-			     (cross yaw-rotated-initial +world-up+)))
-	   (forward-direction (rotate-vector-about-axis yaw-rotated-initial right-direction pitch))
-	   (up-direction (normalize (cross right-direction forward-direction))))
-      (values forward-direction right-direction up-direction))))
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
@@ -180,7 +181,23 @@
 			       (setf position
 				     (transform-vector-3
 				      position
-				      left-matrix)))))))
+				      left-matrix))))))
+		       (let* ((up-direction +world-up+)
+			      (up-scaled (vector* (* *camera-speed* dt)
+						       up-direction)))
+			 (with-members ((x ux) (y uy) (z uz)) up-scaled vector3
+			   (when up
+			     (let ((up-matrix (translate-matrix! ux uy uz)))
+			       (setf position
+				     (transform-vector-3
+				      position
+				      up-matrix))))
+			   (when down
+			     (let ((down-matrix (translate-matrix! (- ux) (- uy) (- uz))))
+			       (setf position
+				     (transform-vector-3
+				      position
+				      down-matrix)))))))
 
 		     (with-mouse ((:delta :x delta-x :y delta-y))
 		       (with-members(yaw pitch) *camera* camera
@@ -217,24 +234,24 @@
 				     (with-members ((x fx) (y fy) (z fz)) forward vector3
 				       (with-members ((x rx) (y ry) (z rz)) right vector3
 					 (with-members ((x ux) (y uy) (z uz)) up vector3
-					   (matrix* 
-					    (matrix! ((fx ux rx 0)
-						      (fy uy ry 0)
-						      (fz uz rz 0)
+					   (matrix*
+					    (matrix! ((fx fy fz 0)
+						      (ux uy uz 0)
+						      (rx ry rz 0)
 						      (0  0  0  0)))
 					    (translate-matrix! (- x) (- y) (- z))))))))
 	       for new-point = (transform-vector-3 point view-matrix)
 	       for x = (vector3-x new-point)
 	       for y = (vector3-y new-point)
 	       for z = (vector3-z new-point)
-	       for projected-z = (* (/ z x) *focal-length*)
-	       for projected-y = (* (/ y x) *focal-length*)
-	       for screen-x = (truncate (+ projected-z (/ *framebuffer-width* 2)))
-	       for screen-y = (truncate (+ projected-y (/ *framebuffer-height* 2)))
-	       doing
-		  (pixel screen-x screen-y +fg+)
-		  (setf (aref *projected-vertices* index) ; save the projection
-			(make-vector2 :x screen-x :y screen-y)))
+	       doing (when (> x +near-plane+)
+		       (let* ((projected-z (* (/ z x) *focal-length*))
+			      (projected-y (* (/ y x) *focal-length*))
+			      (screen-x  (truncate (+ projected-z (/ *framebuffer-width* 2))))
+			      (screen-y  (truncate (+ projected-y (/ *framebuffer-height* 2)))))
+			 (pixel screen-x screen-y +fg+)
+			 (setf (aref *projected-vertices* index) ; save the projection
+			       (make-vector2 :x screen-x :y screen-y)))))
 	     (loop for face across *faces*
 		   doing
 		      (with-members ((x v1) (y v2) (z v3)) face vector3
