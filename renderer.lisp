@@ -94,7 +94,7 @@
 (defun camera-forward()
   (with-members (yaw pitch) *camera* camera
     (let* ((matrix-list (list
-			 (rotate-z-matrix! (- pitch))
+			 (rotate-z-matrix! pitch)
 			 (rotate-y-matrix! (- yaw))))
 	   (final-matrix (reduce #'matrix* matrix-list)))
       (transform-vector-3 +camera-looking-initial+ final-matrix))))
@@ -122,8 +122,9 @@
 		     (%clear-background :white)
 		     (dotimes (x-index *framebuffer-width*)
 		       (dotimes (y-index *framebuffer-height*)
-			 (let ((lisp-color (aref *framebuffer* x-index y-index))
-			       (c-color (mem-aptr c-framebuffer '(:struct %color) (+ (* y-index *framebuffer-width*) x-index))))
+			 (let* ((mapped-y (- (1- *framebuffer-height*) y-index))
+				(lisp-color (aref *framebuffer* x-index y-index))
+				(c-color (mem-aptr c-framebuffer '(:struct %color) (+ (* mapped-y *framebuffer-width*) x-index))))
 			   (with-members ((r cr) (g cg) (b cb) (a ca)) lisp-color color
 			     (with-foreign-slots ((r g b a) c-color (:struct %color))
 			       (setf r cr
@@ -189,7 +190,7 @@
 				   (with-members (yaw pitch) *camera* camera
 				     (reduce #'matrix*
 					     (list
-					      (rotate-z-matrix! (- pitch))
+					      (rotate-z-matrix! pitch)
 					      (rotate-y-matrix! (- yaw))
 					      (translate-matrix! (- x) (- y) (- z))))))
 	       for new-point = (transform-vector-3 point view-matrix)
