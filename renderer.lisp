@@ -11,15 +11,16 @@
   yaw
   pitch)
 
-(defparameter +camera-looking-initial+ (v! 1.0 0.0 0.0))
+(defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
+(defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
 (defparameter +bg+ (color! 255 255 255 255))
 (defparameter +fg+ (color! 0 0 0 255))
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
-(defparameter *camera-speed* 0.25)
+(defparameter *camera-speed* 5)
 
 (defparameter *debug-points* nil)
-(defparameter *framebuffer-height* 500)
-(defparameter *framebuffer-width* 500)
+(defparameter *framebuffer-height* 600)
+(defparameter *framebuffer-width* 600)
 (defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
@@ -28,11 +29,11 @@
 				    :yaw 0.0
 				    :pitch 0.0))
 (defparameter *focal-length* 866.0)
-(defparameter *mouse-sensitivity* 0.01)
-(defparameter *camera-looking* +camera-looking-initial+)
+(defparameter *mouse-sensitivity* 1)
+(defparameter *camera-looking* +camera-forward-initial+)
 
 ;; load vertices & faces from file
-(with-open-file (obj-stream "african_head.obj")
+(with-open-file (obj-stream "cube.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
   (setf (fill-pointer *projected-vertices*) 0)
@@ -93,13 +94,11 @@
 
 (defun camera-forward()
   (with-members (yaw pitch) *camera* camera
-    (let* ((matrix-list (list
-			 (rotate-z-matrix! pitch)
-			 (rotate-y-matrix! (- yaw))))
-	   (final-matrix (reduce #'matrix* matrix-list)))
-      (transform-vector-3 +camera-looking-initial+ final-matrix))))
-
-(camera-forward)
+    (let* ((yaw-rotated-initial (transform-vector-3 +camera-forward-initial+
+						    (rotate-y-matrix! (- yaw))))
+	   (right-direction (normalize
+			     (cross yaw-rotated-initial +world-up+))))
+	   (rotate-vector-about-axis yaw-rotated-initial right-direction pitch))))
 
 (defun camera-up()
   +world-up+)
@@ -109,7 +108,7 @@
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
-    (%set-target-fps 60)
+    (%set-target-fps 24)
     (%disable-cursor)
     (with-members (yaw pitch) *camera* camera
       (setf yaw 0.0
@@ -118,63 +117,65 @@
       (with-texture framebuffer *framebuffer-width* *framebuffer-height*
 	(labels ((repaint()
 		   (funcall painter)
-		   (with-texture-mode framebuffer
-		     (%clear-background :white)
-		     (dotimes (x-index *framebuffer-width*)
-		       (dotimes (y-index *framebuffer-height*)
-			 (let* ((mapped-y (- (1- *framebuffer-height*) y-index))
-				(lisp-color (aref *framebuffer* x-index y-index))
-				(c-color (mem-aptr c-framebuffer '(:struct %color) (+ (* mapped-y *framebuffer-width*) x-index))))
-			   (with-members ((r cr) (g cg) (b cb) (a ca)) lisp-color color
-			     (with-foreign-slots ((r g b a) c-color (:struct %color))
-			       (setf r cr
-				     g cg
-				     b cb
-				     a ca)))))))
+		   (%clear-background :white)
+		   (dotimes (x-index *framebuffer-width*)
+		     (dotimes (y-index *framebuffer-height*)
+		       (let* ((mapped-y (- (1- *framebuffer-height*) y-index))
+			      (lisp-color (aref *framebuffer* x-index y-index))
+			      (c-color (mem-aptr c-framebuffer '(:struct %color) (+ (* mapped-y *framebuffer-width*) x-index))))
+			 (with-members ((r cr) (g cg) (b cb) (a ca)) lisp-color color
+			   (with-foreign-slots ((r g b a) c-color (:struct %color))
+			     (setf r cr
+				   g cg
+				   b cb
+				   a ca))))))
 		   (%update-texture (render-texture-texture framebuffer) c-framebuffer)))
 	  (repaint)
-	  (loop until (%window-should-close) doing
-	    (with-keys ((:w :down forward)
-			(:a :down left)
-			(:s :down backward)
-			(:d :down right)
-			(:left_control :down down)
-			(:space :down up))
-	      (with-members (position) *camera* camera
-		(with-members ((x cam-x) (y cam-y) (z cam-z)) position vector3
-		  (let ((forward-direction (camera-forward)))
-		    (with-members ((x fx) (y fy) (z fz)) forward-direction vector3
-		      (when forward
-			(let ((forward-matrix (translate-matrix! fx fy fz)))
-			  (setf position
-				(transform-vector-3
-				 position
-				 forward-matrix))))
-		      (when backward
-			(let ((backward-matrix (translate-matrix! (- fx) (- fy) (- fz))))
-			  (setf position
-				(transform-vector-3
-				 position
-				 backward-matrix))))))))
+	  (loop until (%window-should-close)
+		for dt = (%get-frame-time)
+		doing
+		   (with-keys ((:w :down forward)
+			       (:a :down left)
+			       (:s :down backward)
+			       (:d :down right)
+			       (:left_control :down down)
+			       (:space :down up))
+		     (with-members (position) *camera* camera
+		       (let* ((forward-direction (camera-forward))
+			      (forward-scaled (vector* (* *camera-speed* dt)
+						       forward-direction)))
+			 (with-members ((x fx) (y fy) (z fz)) forward-scaled vector3
+			   (when forward
+			     (let ((forward-matrix (translate-matrix! fx fy fz)))
+			       (setf position
+				     (transform-vector-3
+				      position
+				      forward-matrix))))
+			   (when backward
+			     (let ((backward-matrix (translate-matrix! (- fx) (- fy) (- fz))))
+			       (setf position
+				     (transform-vector-3
+				      position
+				      backward-matrix)))))))
 
-	      (with-mouse ((:delta :x delta-x :y delta-y))
-		(with-members(yaw pitch) *camera* camera
-		  (incf yaw (* delta-x *mouse-sensitivity*))
-		  (wrapf yaw 360.0)
-		  (incf pitch (* delta-y *mouse-sensitivity*))
-		  (clampf pitch 90.0 -90.0))
-		(when (or forward backward left right up down (not (zerop delta-x)) (not (zerop delta-y)))
-		  (repaint))))
-	    (with-drawing
-	      (%clear-background :white)
-	      (with-math-coordinates (0 *framebuffer-height*)
-		(%draw-texture (render-texture-texture framebuffer)
-			       0
-			       0
-			       :white))
-	      (draw-fps 10 10)
-	      (with-members (yaw pitch) *camera* camera
-		(draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 10 80 20 :blue)))))))))
+		     (with-mouse ((:delta :x delta-x :y delta-y))
+		       (with-members(yaw pitch) *camera* camera
+			 (incf yaw (* delta-x *mouse-sensitivity* dt))
+			 (wrapf yaw 360.0)
+			 (incf pitch (* delta-y *mouse-sensitivity* dt))
+			 (clampf pitch 90.0 -90.0))
+		       (when (or forward backward left right up down (not (zerop delta-x)) (not (zerop delta-y)))
+			 (repaint))))
+		   (with-drawing
+		     (%clear-background :white)
+		     (with-math-coordinates (0 *framebuffer-height*)
+		       (%draw-texture (render-texture-texture framebuffer)
+				      0
+				      0
+				      :white))
+		     (draw-fps 10 10)
+		     (with-members (yaw pitch) *camera* camera
+		       (draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 10 80 20 :blue)))))))))
 
 
 
@@ -223,4 +224,6 @@
 
 			      
 
-; (%close-window)
+					; (%close-window)
+
+
