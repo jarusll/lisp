@@ -13,6 +13,7 @@
 
 (defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
 (defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
+(defparameter +camera-position-initial+ (v! -5.0 0.0 1.0))
 (defparameter +bg+ (color! 255 255 255 255))
 (defparameter +fg+ (color! 0 0 0 255))
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
@@ -25,7 +26,7 @@
 (defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+))
-(defparameter *camera* (make-camera :position (v! -5.0 0.0 0.0)
+(defparameter *camera* (make-camera :position +camera-position-initial+
 				    :yaw 0.0
 				    :pitch 0.0))
 (defparameter *focal-length* 866.0)
@@ -93,25 +94,32 @@
           (incf y0 sy))))))
 
 (defun camera-forward()
-  (with-members (yaw pitch) *camera* camera
-    (let* ((yaw-rotated-initial (transform-vector-3 +camera-forward-initial+
-						    (rotate-y-matrix! (- yaw))))
-	   (right-direction (normalize
-			     (cross yaw-rotated-initial +world-up+))))
-	   (rotate-vector-about-axis yaw-rotated-initial right-direction pitch))))
+  (nth-value 0 (camera-basis)))
 
 (defun camera-up()
-  +world-up+)
+  (nth-value 2 (camera-basis)))
 
 (defun camera-right()
-  +world-up+)
+  (nth-value 1 (camera-basis)))
+
+(defun camera-basis()
+  (with-members (yaw pitch) *camera* camera
+    (let* ((yaw-rotated-initial (normalize
+				 (transform-vector-3 +camera-forward-initial+
+						     (rotate-y-matrix! (- yaw)))))
+	   (right-direction (normalize
+			     (cross yaw-rotated-initial +world-up+)))
+	   (forward-direction (rotate-vector-about-axis yaw-rotated-initial right-direction pitch))
+	   (up-direction (normalize (cross right-direction forward-direction))))
+      (values forward-direction right-direction up-direction))))
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
     (%set-target-fps 24)
     (%disable-cursor)
-    (with-members (yaw pitch) *camera* camera
-      (setf yaw 0.0
+    (with-members (position yaw pitch) *camera* camera
+      (setf position +camera-position-initial+
+	    yaw 0.0
 	    pitch 0.0))
     (with-foreign-object (c-framebuffer '(:struct %color) (* *framebuffer-width* *framebuffer-height*))
       (with-texture framebuffer *framebuffer-width* *framebuffer-height*
@@ -156,7 +164,23 @@
 			       (setf position
 				     (transform-vector-3
 				      position
-				      backward-matrix)))))))
+				      backward-matrix))))))
+		       (let* ((right-direction (camera-right))
+			      (right-scaled (vector* (* *camera-speed* dt)
+						       right-direction)))
+			 (with-members ((x rx) (y ry) (z rz)) right-scaled vector3
+			   (when right
+			     (let ((right-matrix (translate-matrix! rx ry rz)))
+			       (setf position
+				     (transform-vector-3
+				      position
+				      right-matrix))))
+			   (when left
+			     (let ((left-matrix (translate-matrix! (- rx) (- ry) (- rz))))
+			       (setf position
+				     (transform-vector-3
+				      position
+				      left-matrix)))))))
 
 		     (with-mouse ((:delta :x delta-x :y delta-y))
 		       (with-members(yaw pitch) *camera* camera
@@ -188,12 +212,17 @@
 	       for index from 1
 	       for view-matrix = (with-members
 				     (x y z) (camera-position *camera*) vector3
-				   (with-members (yaw pitch) *camera* camera
-				     (reduce #'matrix*
-					     (list
-					      (rotate-z-matrix! pitch)
-					      (rotate-y-matrix! (- yaw))
-					      (translate-matrix! (- x) (- y) (- z))))))
+				   (multiple-value-bind
+					 (forward right up) (camera-basis)
+				     (with-members ((x fx) (y fy) (z fz)) forward vector3
+				       (with-members ((x rx) (y ry) (z rz)) right vector3
+					 (with-members ((x ux) (y uy) (z uz)) up vector3
+					   (matrix* 
+					    (matrix! ((fx ux rx 0)
+						      (fy uy ry 0)
+						      (fz uz rz 0)
+						      (0  0  0  0)))
+					    (translate-matrix! (- x) (- y) (- z))))))))
 	       for new-point = (transform-vector-3 point view-matrix)
 	       for x = (vector3-x new-point)
 	       for y = (vector3-y new-point)
@@ -225,5 +254,3 @@
 			      
 
 					; (%close-window)
-
-

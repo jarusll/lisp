@@ -269,13 +269,13 @@
 (defmacro matrix! (rows)
   "Supply up to 4 rows of up to 4 values. Missing columns and rows are filled with 0."
   (let ((r0 (append (coerce (or (nth 0 rows) '()) 'list)
-                    '(1 0 0 0)))
+                    '(0 0 0 0)))
         (r1 (append (coerce (or (nth 1 rows) '()) 'list)
-                    '(0 1 0 0)))
+                    '(0 0 0 0)))
         (r2 (append (coerce (or (nth 2 rows) '()) 'list)
-                    '(0 0 1 0)))
+                    '(0 0 0 0)))
         (r3 (append (coerce (or (nth 3 rows) '()) 'list)
-                    '(0 0 0 1))))
+                    '(0 0 0 0))))
     `(make-matrix :m0 ,(nth 0 r0) :m4 ,(nth 1 r0) :m8 ,(nth 2 r0) :m12 ,(nth 3 r0)
                   :m1 ,(nth 0 r1) :m5 ,(nth 1 r1) :m9 ,(nth 2 r1) :m13 ,(nth 3 r1)
                   :m2 ,(nth 0 r2) :m6 ,(nth 1 r2) :m10 ,(nth 2 r2) :m14 ,(nth 3 r2)
@@ -362,6 +362,26 @@
                     (- 1 cos-theta))
 		 k)))
     (reduce #'vector+ (list term1 term2 term3))))
+
+(defun rotate-about-axis-matrix! (axis angle-degrees)
+  (let* ((normalized-axis (normalize axis))
+         (angle-radians (* angle-degrees (/ pi 180.0)))
+         (cosine (cos angle-radians))
+         (sine (sin angle-radians))
+         (one-minus-cosine (- 1.0 cosine)))
+    (with-members (x y z) normalized-axis vector3
+      (matrix!
+       (((+ cosine (* one-minus-cosine x x))
+         (- (* one-minus-cosine x y) (* sine z))
+         (+ (* one-minus-cosine x z) (* sine y)))
+
+	((+ (* one-minus-cosine x y) (* sine z))
+         (+ cosine (* one-minus-cosine y y))
+         (- (* one-minus-cosine y z) (* sine x)))
+
+	((- (* one-minus-cosine x z) (* sine y))
+         (+ (* one-minus-cosine y z) (* sine x))
+         (+ cosine (* one-minus-cosine z z))))))))
 
 (defmacro with-transform(matrix &body body)
   (with-gensyms(old-matrix)
