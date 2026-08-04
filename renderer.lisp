@@ -1,11 +1,10 @@
 (in-package #:gfx)
 
-(declaim (optimize
-          (debug 3)
-          (speed 0)
-          (safety 3)
-          (space 0)))
-
+;; (declaim (optimize
+;;           (debug 3)
+;;           (speed 0)
+;;           (safety 3)
+;;           (space 0)))
 
 (setf *kernel* (make-kernel 6))
 (defparameter *channel* (make-channel))
@@ -260,21 +259,32 @@
 		       (setf (aref *projected-vertices* index) nil)))
 	     (loop for face across *faces*
 		   doing
-		      (with-members ((x v1) (y v2) (z v3)) face vector3
-			(let ((start (aref *projected-vertices* v1))
-			      (mid (aref *projected-vertices* v2))
-			      (end (aref *projected-vertices* v3)))
-			  (loop for (p0 p1) in
-				`((,start ,mid)
-				  (,mid ,end)
-				  (,end ,start))
-				while (and start mid end)
-				doing
-				   (with-members ((x x0) (y y0)) p0 vector2
-				     (with-members ((x x1) (y y1)) p1 vector2
-				       (bresenham x0 y0 x1 y1 #'(lambda(x-prime y-prime)
-								  (pixel x-prime y-prime +fg+)))))))))))
+		      (with-members ((position camera-position)) *camera* camera
+			(with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
+			  (let* ((start (aref *projected-vertices* v1-index))
+				 (mid (aref *projected-vertices* v2-index))
+				 (end (aref *projected-vertices* v3-index)))
+			    (loop for (p0 p1) in
+				  `((,start ,mid)
+				    (,mid ,end)
+				    (,end ,start))
+				  while (and start mid end)
+				  doing
+				     (let* ((v1 (aref *vertices* (1- v1-index)))
+					    (v2 (aref *vertices* (1- v2-index)))
+					    (v3 (aref *vertices* (1- v3-index)))
+					    (v3-to-v2 (vector- v2 v3))
+					    (v2-to-v1 (vector- v1 v2))
+					    (face-normal (cross v3-to-v2 v2-to-v1))
+					    (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
+					    (dotted (dot face-normal face-to-cam))
+					    (is-facing-camera? (> dotted 0)))
+				       (if is-facing-camera?
+					   (with-members ((x x0) (y y0)) p0 vector2
+					     (with-members ((x x1) (y y1)) p1 vector2
+					       (bresenham x0 y0 x1 y1 #'(lambda(x-p y-p)
+									  (pixel x-p y-p +fg+))))))))))))))
 
-			      
+
 
 					; (%close-window)
