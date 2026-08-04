@@ -238,7 +238,7 @@
 					    (matrix! ((fx fy fz 0)
 						      (ux uy uz 0)
 						      (rx ry rz 0)
-						      (0  0  0  0)))
+						      (0  0  0  1)))
 					    (translate-matrix! (- x) (- y) (- z))))))))
 	       for new-point = (transform-vector-3 point view-matrix)
 	       for x = (vector3-x new-point)
