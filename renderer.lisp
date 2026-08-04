@@ -6,6 +6,10 @@
           (safety 3)
           (space 0)))
 
+
+(setf *kernel* (make-kernel 6))
+(defparameter *channel* (make-channel))
+
 (defstruct camera
   position
   yaw
@@ -18,7 +22,7 @@
 (defparameter +fg+ (color! 0 0 0 255))
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
 (defparameter *camera-speed* 5)
-(defparameter +near-plane+ 0.01)
+(defparameter +near-plane+ 0.1)
 
 (defparameter *debug-points* nil)
 (defparameter *framebuffer-height* 600)
@@ -116,7 +120,7 @@
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
-    (%set-target-fps 24)
+    (%set-target-fps 30)
     (%disable-cursor)
     (with-members (position yaw pitch) *camera* camera
       (setf position +camera-position-initial+
