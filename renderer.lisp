@@ -262,6 +262,7 @@
 				`((,start ,mid)
 				  (,mid ,end)
 				  (,end ,start))
+				while (and start mid end)
 				doing
 				   (with-members ((x x0) (y y0)) p0 vector2
 				     (with-members ((x x1) (y y1)) p1 vector2
