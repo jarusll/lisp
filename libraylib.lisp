@@ -1,5 +1,6 @@
+
 (defpackage #:gfx
-  (:use #:cl #:cffi))
+  (:use #:cl #:cffi #:lparallel))
 
 (in-package #:gfx)
 
