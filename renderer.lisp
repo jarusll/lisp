@@ -251,7 +251,9 @@
 			      (screen-y  (truncate (+ projected-y (/ *framebuffer-height* 2)))))
 			 (pixel screen-x screen-y +fg+)
 			 (setf (aref *projected-vertices* index) ; save the projection
-			       (make-vector2 :x screen-x :y screen-y)))))
+			       (make-vector2 :x screen-x :y screen-y))))
+		     (when (<= x +near-plane+)
+		       (setf (aref *projected-vertices* index) nil)))
 	     (loop for face across *faces*
 		   doing
 		      (with-members ((x v1) (y v2) (z v3)) face vector3
