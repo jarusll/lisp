@@ -14,6 +14,11 @@
   yaw
   pitch)
 
+(defstruct basis
+  forward
+  right
+  up)
+
 (defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
 (defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
 (defparameter +camera-position-initial+ (v! -5.0 0.0 1.0))
@@ -106,16 +111,16 @@
 			     (cross yaw-rotated-initial +world-up+)))
 	   (forward-direction (rotate-vector-about-axis yaw-rotated-initial right-direction (- pitch)))
 	   (up-direction (normalize (cross right-direction forward-direction))))
-      (values forward-direction right-direction up-direction))))
+      (make-basis :forward forward-direction :right right-direction :up up-direction))))
 
 (defun camera-forward()
-  (nth-value 0 (camera-basis)))
+  (basis-forward (camera-basis)))
 
 (defun camera-up()
-  (nth-value 2 (camera-basis)))
+  (basis-up (camera-basis)))
 
 (defun camera-right()
-  (nth-value 1 (camera-basis)))
+  (basis-right (camera-basis)))
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
@@ -221,19 +226,19 @@
 		     (with-members (yaw pitch) *camera* camera
 		       (draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 10 80 20 :blue)))))))))
 
-
+(defun clear-framebuffer()
+  (dotimes (x *framebuffer-width*)
+    (dotimes (y *framebuffer-height*)
+      (setf (aref *framebuffer* x y) +bg+))))
 
 (display #'(lambda()
 	     (loop
-	       initially (dotimes (x *framebuffer-width*)
-			   (dotimes (y *framebuffer-height*)
-			     (setf (aref *framebuffer* x y) +bg+)))
+	       initially (clear-framebuffer)
 	       for point across *vertices*
 	       for index from 1
 	       for view-matrix = (with-members
 				     (x y z) (camera-position *camera*) vector3
-				   (multiple-value-bind
-					 (forward right up) (camera-basis)
+				   (with-members(forward right up) (camera-basis) basis
 				     (with-members ((x fx) (y fy) (z fz)) forward vector3
 				       (with-members ((x rx) (y ry) (z rz)) right vector3
 					 (with-members ((x ux) (y uy) (z uz)) up vector3
