@@ -27,12 +27,14 @@
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
 (defparameter *camera-speed* 5)
 (defparameter +near-plane+ 0.1)
+(defparameter +epsilon+ -1e-6)
+(defparameter +pixel+ (color! 0 255 0 255))
 
 (defparameter *debug-points* nil)
 (defparameter *framebuffer-height* 600)
 (defparameter *framebuffer-width* 600)
 (defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
-(defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
+(defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0)) ; 1 indexed
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+))
 (defparameter *camera* (make-camera :position +camera-position-initial+
@@ -42,8 +44,10 @@
 (defparameter *mouse-sensitivity* 1)
 (defparameter *camera-looking* +camera-forward-initial+)
 
+(defparameter *backface-culled-faces* (make-array 2000 :adjustable t :fill-pointer 0))
+
 ;; load vertices & faces from file
-(with-open-file (obj-stream "african_head.obj")
+(with-open-file (obj-stream "cube.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
   (setf (fill-pointer *projected-vertices*) 0)
@@ -231,13 +235,118 @@
     (dotimes (y *framebuffer-height*)
       (setf (aref *framebuffer* x y) +bg+))))
 
+(defun wireframe()
+  (loop for face across *faces*
+	doing
+	   (with-members ((position camera-position)) *camera* camera
+	     (with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
+	       (let* ((start (aref *projected-vertices* v1-index))
+		      (mid (aref *projected-vertices* v2-index))
+		      (end (aref *projected-vertices* v3-index)))
+		 (loop for (p0 p1) in
+		       `((,start ,mid)
+			 (,mid ,end)
+			 (,end ,start))
+		       while (and start mid end)
+		       doing
+			  (let* ((v1 (aref *vertices* (1- v1-index)))
+				 (v2 (aref *vertices* (1- v2-index)))
+				 (v3 (aref *vertices* (1- v3-index)))
+				 (v3-to-v2 (vector- v2 v3))
+				 (v2-to-v1 (vector- v1 v2))
+				 (face-normal (cross v3-to-v2 v2-to-v1))
+				 (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
+				 (dotted (dot face-normal face-to-cam))
+				 (is-facing-camera? (> dotted 0)))
+			    (if is-facing-camera?
+				(with-members ((x x0) (y y0)) p0 vector2
+				  (with-members ((x x1) (y y1)) p1 vector2
+				    (bresenham (truncate x0)
+					       (truncate y0)
+					       (truncate x1)
+					       (truncate y1)
+					       #'(lambda(x-p y-p)
+							       (pixel x-p y-p +fg+)))))))))))))
+
+(defun backface-cull()
+  (loop for face across *faces*
+	  initially
+	     (setf (fill-pointer *backface-culled-faces*) 0)
+	doing
+	   (with-members ((position camera-position)) *camera* camera
+	     (with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
+	       (let* ((start (aref *projected-vertices* v1-index))
+		      (mid (aref *projected-vertices* v2-index))
+		      (end (aref *projected-vertices* v3-index)))
+		 (loop for (p0 p1) in
+		       `((,start ,mid)
+			 (,mid ,end)
+			 (,end ,start))
+		       while (and start mid end)
+		       doing
+			  (let* ((v1 (aref *vertices* (1- v1-index)))
+				 (v2 (aref *vertices* (1- v2-index)))
+				 (v3 (aref *vertices* (1- v3-index)))
+				 (v3-to-v2 (vector- v2 v3))
+				 (v2-to-v1 (vector- v1 v2))
+				 (face-normal (cross v3-to-v2 v2-to-v1))
+				 (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
+				 (dotted (dot face-normal face-to-cam))
+				 (is-facing-camera? (> dotted 0)))
+			    (if is-facing-camera?
+				(vector-push-extend face *backface-culled-faces*)))))))))
+				
+
+(defun solve-linear-2x2 (l1 l2 r)
+  (with-members ((x a) (y d)) l1 vector2
+    (with-members ((x b) (y e)) l2 vector2
+      (with-members ((x c) (y f)) r vector2
+	(let* ((det (- (* a e) (* b d))))
+	  (assert (/= det 0))
+	  (make-vector2
+	   :x (/ (- (* c e) (* b f)) det)
+	   :y (/ (- (* a f) (* c d)) det)))))))
+	  
+
+(defun rasterize()
+  (loop for face across *backface-culled-faces*
+	doing
+	   (with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
+	     (let* ((v1 (aref *projected-vertices* v1-index))
+		    (v2 (aref *projected-vertices* v2-index))
+		    (v3 (aref *projected-vertices* v3-index)))
+	       (and v1 v2 v3
+		    (with-members ((x v1-x) (y v1-y)) v1 vector2
+		      (with-members ((x v2-x) (y v2-y)) v2 vector2
+			(with-members ((x v3-x) (y v3-y)) v3 vector2
+			  (let ((top (ceiling (max v1-y v2-y v3-y)))
+				(bottom (floor (min v1-y v2-y v3-y)))
+				(left (floor (min v1-x v2-x v3-x)))
+				(right (ceiling (max v1-x v2-x v3-x)))
+				(e1 (vector- v2 v1))
+				(e2 (vector- v3 v1)))
+			    (loop for px from left to right do
+			      (loop for py from bottom to top
+				    for v1-to-pixel = (vector- (v! px py) v1)
+				    for solved = (solve-linear-2x2 e1 e2 v1-to-pixel)
+				    doing
+				       (with-members ((x beta) (y gamma))
+					   solved 
+					   vector2
+					 (let* ((alpha (- 1 beta gamma +epsilon+)))
+					   (when (and (plusp alpha)
+						      (plusp beta)
+						      (plusp gamma))
+					     (pixel px py (color! 255 0 0 255))))))))))))))))
+						
+					  
+	
 (display #'(lambda()
 	     (loop
 	       initially (clear-framebuffer)
 	       for point across *vertices*
 	       for index from 1
-	       for view-matrix = (with-members
-				     (x y z) (camera-position *camera*) vector3
+	       for view-matrix = (with-members(x y z) (camera-position *camera*) vector3
 				   (with-members(forward right up) (camera-basis) basis
 				     (with-members ((x fx) (y fy) (z fz)) forward vector3
 				       (with-members ((x rx) (y ry) (z rz)) right vector3
@@ -255,41 +364,17 @@
 	       doing (when (> x +near-plane+)
 		       (let* ((projected-z (* (/ z x) *focal-length*))
 			      (projected-y (* (/ y x) *focal-length*))
-			      (screen-x  (truncate (+ projected-z (/ *framebuffer-width* 2))))
-			      (screen-y  (truncate (+ projected-y (/ *framebuffer-height* 2)))))
-			 (pixel screen-x screen-y +fg+)
+			      (projected-x-center (+ projected-z (/ *framebuffer-width* 2)))
+			      (projected-y-center (+ projected-y (/ *framebuffer-height* 2)))
+			      (screen-x  (truncate projected-x-center))
+			      (screen-y  (truncate projected-y-center)))
+			 ;; (pixel screen-x screen-y +pixel+)
 			 (setf (aref *projected-vertices* index) ; save the projection
-			       (make-vector2 :x screen-x :y screen-y))))
+			       (make-vector2 :x projected-x-center :y projected-y-center))))
 		     (when (<= x +near-plane+)
 		       (setf (aref *projected-vertices* index) nil)))
-	     (loop for face across *faces*
-		   doing
-		      (with-members ((position camera-position)) *camera* camera
-			(with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
-			  (let* ((start (aref *projected-vertices* v1-index))
-				 (mid (aref *projected-vertices* v2-index))
-				 (end (aref *projected-vertices* v3-index)))
-			    (loop for (p0 p1) in
-				  `((,start ,mid)
-				    (,mid ,end)
-				    (,end ,start))
-				  while (and start mid end)
-				  doing
-				     (let* ((v1 (aref *vertices* (1- v1-index)))
-					    (v2 (aref *vertices* (1- v2-index)))
-					    (v3 (aref *vertices* (1- v3-index)))
-					    (v3-to-v2 (vector- v2 v3))
-					    (v2-to-v1 (vector- v1 v2))
-					    (face-normal (cross v3-to-v2 v2-to-v1))
-					    (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
-					    (dotted (dot face-normal face-to-cam))
-					    (is-facing-camera? (> dotted 0)))
-				       (if is-facing-camera?
-					   (with-members ((x x0) (y y0)) p0 vector2
-					     (with-members ((x x1) (y y1)) p1 vector2
-					       (bresenham x0 y0 x1 y1 #'(lambda(x-p y-p)
-									  (pixel x-p y-p +fg+))))))))))))))
-
-
-
-					; (%close-window)
+	     (backface-cull)
+	     (time (rasterize))))
+	     ;; (wireframe)))
+	     
+ ;; (%close-window)
