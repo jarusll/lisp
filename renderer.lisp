@@ -81,7 +81,7 @@
 								       :junk-allowed t))))
 					  *faces*)))))))
 
-(defun transform-vector-3 (v m)
+(defun transform-vector3(v m)
   "Transform a Vector3 by *draw-transform* (treated as w = 1)."
   (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14) m matrix
     (make-vector3
@@ -116,7 +116,7 @@
 (defun camera-basis()
   (with-members (yaw pitch) *camera* camera
     (let* ((yaw-rotated-initial (normalize
-				 (transform-vector-3 +camera-forward-initial+
+				 (transform-vector3 +camera-forward-initial+
 						     (rotate-y-matrix! yaw))))
 	   (right-direction (normalize
 			     (cross yaw-rotated-initial +world-up+)))
@@ -176,13 +176,13 @@
 			   (when forward
 			     (let ((forward-matrix (translate-matrix! fx fy fz)))
 			       (setf position
-				     (transform-vector-3
+				     (transform-vector3
 				      position
 				      forward-matrix))))
 			   (when backward
 			     (let ((backward-matrix (translate-matrix! (- fx) (- fy) (- fz))))
 			       (setf position
-				     (transform-vector-3
+				     (transform-vector3
 				      position
 				      backward-matrix))))))
 		       (let* ((right-direction (camera-right))
@@ -192,13 +192,13 @@
 			   (when right
 			     (let ((right-matrix (translate-matrix! rx ry rz)))
 			       (setf position
-				     (transform-vector-3
+				     (transform-vector3
 				      position
 				      right-matrix))))
 			   (when left
 			     (let ((left-matrix (translate-matrix! (- rx) (- ry) (- rz))))
 			       (setf position
-				     (transform-vector-3
+				     (transform-vector3
 				      position
 				      left-matrix))))))
 		       (let* ((up-direction +world-up+)
@@ -208,13 +208,13 @@
 			   (when up
 			     (let ((up-matrix (translate-matrix! ux uy uz)))
 			       (setf position
-				     (transform-vector-3
+				     (transform-vector3
 				      position
 				      up-matrix))))
 			   (when down
 			     (let ((down-matrix (translate-matrix! (- ux) (- uy) (- uz))))
 			       (setf position
-				     (transform-vector-3
+				     (transform-vector3
 				      position
 				      down-matrix)))))))
 
@@ -362,7 +362,7 @@
 					     (translate-matrix! (- x) (- y) (- z))))))))
 	       for index from 1
 	       for point across *vertices*
-	       for new-point = (transform-vector-3 point view-matrix)
+	       for new-point = (transform-vector3 point view-matrix)
 	       for x = (vector3-x new-point)
 	       for y = (vector3-y new-point)
 	       for z = (vector3-z new-point)
