@@ -5681,11 +5681,24 @@ Unannotated args pass through unchanged."
     (with-members ((x c) (y d)) v2-b vector2
       (- (* a d) (* b c)))))
 
-(defmethod cross((v1 vector3) (v2 vector3))
-  (v!
-   (det2 (reduce-dimension v1 :x) (reduce-dimension v2 :x))
-   (- (det2 (reduce-dimension v1 :y) (reduce-dimension v2 :y)))
-   (det2 (reduce-dimension v1 :z) (reduce-dimension v2 :z))))
+(defmethod cross ((v1 vector3) (v2 vector3))
+  (with-members ((x ax) (y ay) (z az)) v1 vector3
+    (with-members ((x bx) (y by) (z bz)) v2 vector3
+      (v!
+       (- (* ay bz) (* az by))
+       (- (* az bx) (* ax bz))
+       (- (* ax by) (* ay bx))))))
+
+(defmethod crossf ((v1 vector3) (v2 vector3))
+  (with-members ((x ax) (y ay) (z az)) v1 vector3
+    (with-members ((x bx) (y by) (z bz)) v2 vector3
+      (let ((xp (- (* ay bz) (* az by)))
+	    (yp (- (* az bx) (* ax bz)))
+	    (zp (- (* ax by) (* ay bx))))
+	(setf ax xp
+	      ay yp
+	      az zp)
+	v1))))
 
 (defmacro defvector-ops(v-type v-members) ; vector3 (x y z)
   (let* ((typename (symbol-name v-type)) ; v-type = vector3, typename = "VECTOR3"
@@ -5695,19 +5708,35 @@ Unannotated args pass through unchanged."
 				(list (intern (symbol-name member) :keyword)
 				      (intern (concatenate 'string typename "-" (symbol-name member)))))))
     `(progn
-       (defmethod vector+((a ,v-type) (b ,v-type))
+       (defmethod vector-add((a ,v-type) (b ,v-type))
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (+ (,accessor a)
 							   (,accessor b))))))
-       (defmethod vector-((a ,v-type) (b ,v-type))
+       (defmethod vector-addf((a ,v-type) (b ,v-type))
+	 (setf ,@(loop for (member accessor) in members-accessors
+		       appending `((,accessor a) (+ (,accessor a)
+						    (,accessor b)))))
+	 a)
+       (defmethod vector-sub((a ,v-type) (b ,v-type))
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (- (,accessor a)
 							   (,accessor b))))))
-       (defmethod vector*((a single-float) (v ,v-type))
+       (defmethod vector-subf((a ,v-type) (b ,v-type))
+	 (setf ,@(loop for (member accessor) in members-accessors
+		       appending `((,accessor a) (- (,accessor a)
+						    (,accessor b)))))
+	 a)
+       (defmethod vector-mul((a single-float) (v ,v-type))
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (* a
 							   (,accessor v))))))
+       (defmethod vector-mulf((a single-float) (v ,v-type))
+	 (setf ,@(loop for (member accessor) in members-accessors
+		       appending `((,accessor v) (* a
+						    (,accessor v)))))
+	 v)
        (defmethod dot((a ,v-type) (b ,v-type))
+	 (declare (values single-float))
 	 (+ ,@(loop for (member accessor) in members-accessors
 		    collecting `(* (,accessor a)
 				   (,accessor b)))))
@@ -5715,8 +5744,10 @@ Unannotated args pass through unchanged."
 	 (declare (values single-float))
 	 (sqrt (dot v v)))
        (defmethod normalize ((v ,v-type))
-	 (vector* (/ (magnitude v)) v)))))
-
+	 (vector-mul (/ (magnitude v)) v))
+       (defmethod normalizef ((v ,v-type))
+	 (vector-mulf (/ (magnitude v)) v)
+	 v))))
 
 
 (defvector-ops vector2 (x y))
