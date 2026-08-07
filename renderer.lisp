@@ -28,7 +28,7 @@
 
 (defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
 (defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
-(defparameter +camera-position-initial+ (v! -100.0 0.0 1.0))
+(defparameter +camera-position-initial+ (v! -5.0 0.0 1.0))
 (defparameter +bg+ (color! 255 255 255 255))
 (defparameter +fg+ (color! 0 0 0 255))
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
@@ -54,7 +54,7 @@
 (defparameter *backface-culled-faces* (make-array 2000 :adjustable t :fill-pointer 0))
 
 ;; load vertices & faces from file
-(with-open-file (obj-stream "sponza.obj")
+(with-open-file (obj-stream "african_head.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
   (setf (fill-pointer *projected-vertices*) 0)
@@ -88,6 +88,25 @@
      :x (+ (* m0 (vector3-x v)) (* m4 (vector3-y v)) (* m8 (vector3-z v)) m12)
      :y (+ (* m1 (vector3-x v)) (* m5 (vector3-y v)) (* m9 (vector3-z v)) m13)
      :z (+ (* m2 (vector3-x v)) (* m6 (vector3-y v)) (* m10 (vector3-z v)) m14))))
+
+(defun transform-vector3f(v m)
+  "Transform a Vector3 in-place by m (treated as w = 1)."
+  (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14) m matrix
+    (let* ((vx (vector3-x v))
+           (vy (vector3-y v))
+           (vz (vector3-z v))
+           (xp (+ (* m0 vx) (* m4 vy) (* m8 vz) m12))
+           (yp (+ (* m1 vx) (* m5 vy) (* m9 vz) m13))
+           (zp (+ (* m2 vx) (* m6 vy) (* m10 vz) m14)))
+      (with-members ((x vx) (y vy) (z vz)) v vector3
+        (setf vx xp vy yp vz zp))
+      v)))
+
+(defun transform-vector3-into(dest v m)
+  "Transform a Vector3 by m into dest (treated as w = 1)."
+  (vector-copyf dest v)
+  (transform-vector3f dest m)
+  dest)
 
 (defun pixel(x y color)
   (when (and (<= 0 x (1- *framebuffer-width*))
@@ -170,7 +189,7 @@
 			       (:space :down up))
 		     (with-members (position) *camera* camera
 		       (let* ((forward-direction (camera-forward))
-			      (forward-scaled (vector* (* *camera-speed* dt)
+			      (forward-scaled (vector-mul (* *camera-speed* dt)
 						       forward-direction)))
 			 (with-members ((x fx) (y fy) (z fz)) forward-scaled vector3
 			   (when forward
@@ -186,7 +205,7 @@
 				      position
 				      backward-matrix))))))
 		       (let* ((right-direction (camera-right))
-			      (right-scaled (vector* (* *camera-speed* dt)
+			      (right-scaled (vector-mul (* *camera-speed* dt)
 						     right-direction)))
 			 (with-members ((x rx) (y ry) (z rz)) right-scaled vector3
 			   (when right
@@ -202,7 +221,7 @@
 				      position
 				      left-matrix))))))
 		       (let* ((up-direction +world-up+)
-			      (up-scaled (vector* (* *camera-speed* dt)
+			      (up-scaled (vector-mul (* *camera-speed* dt)
 						  up-direction)))
 			 (with-members ((x ux) (y uy) (z uz)) up-scaled vector3
 			   (when up
@@ -362,27 +381,28 @@
 						       (rx ry rz 0)
 						       (0  0  0  1)))
 					     (translate-matrix! (- x) (- y) (- z))))))))
+	       with new-point = (make-vector3)
 	       for index from 1
 	       for point across *vertices*
-	       for new-point = (transform-vector3 point view-matrix)
-	       for x = (vector3-x new-point)
-	       for y = (vector3-y new-point)
-	       for z = (vector3-z new-point)
-	       doing (when (> x +near-plane+)
-		       (let* ((projected-z (* (/ z x) *focal-length*))
-			      (projected-y (* (/ y x) *focal-length*))
-			      (projected-x-center (+ projected-z (/ *framebuffer-width* 2)))
-			      (projected-y-center (+ projected-y (/ *framebuffer-height* 2)))
-			      (screen-x  (truncate projected-x-center))
-			      (screen-y  (truncate projected-y-center)))
-			 ;; (pixel screen-x screen-y +pixel+)
-			 (setf (aref *projected-vertices* index) ; save the projection
-			       (make-vector2 :x projected-x-center :y projected-y-center))))
-		     (when (<= x +near-plane+)
-		       (setf (aref *projected-vertices* index) nil)))
+	       doing
+		  (transform-vector3-into new-point point view-matrix)
+	       doing
+		  (with-members (x y z) new-point vector3
+		    (when (> x +near-plane+)
+		      (let* ((projected-z (* (/ z x) *focal-length*))
+			     (projected-y (* (/ y x) *focal-length*))
+			     (projected-x-center (+ projected-z (/ *framebuffer-width* 2)))
+			     (projected-y-center (+ projected-y (/ *framebuffer-height* 2)))
+			     (screen-x  (truncate projected-x-center))
+			     (screen-y  (truncate projected-y-center)))
+			;; (pixel screen-x screen-y +pixel+)
+			(setf (aref *projected-vertices* index) ; save the projection
+			      (make-vector2 :x projected-x-center :y projected-y-center))))
+		    (when (<= x +near-plane+)
+		      (setf (aref *projected-vertices* index) nil))))
 	     (backface-cull)
-	     (wireframe)))
-	     ;; (rasterize)))
+	     ;; (wireframe)))
+	     (rasterize)))
 
 ;; (%close-window)
 
