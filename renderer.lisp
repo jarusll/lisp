@@ -81,6 +81,12 @@
 									   :junk-allowed t)))))
 					  *faces*)))))))
 
+;; preallocate projected vertices
+(adjust-array *projected-vertices* (length *vertices*))
+(dotimes (i (length *vertices*))
+  (setf (aref *projected-vertices* i)
+	(make-vector2)))
+
 (defun transform-vector3(v m)
   "Transform a Vector3 by *draw-transform* (treated as w = 1)."
   (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14) m matrix
@@ -363,11 +369,6 @@
 					      (plusp gamma))
 				      do (pixel px py +pixel+))))))))))))
 
-
-(dotimes (i (length *vertices*))
-  (setf (aref *projected-vertices* i)
-	(make-vector2)))
-
 (display #'(lambda()
 	     (loop
 	       initially (clear-framebuffer)
@@ -406,7 +407,7 @@
 		      (setf (aref *projected-vertices* index) nil))))
 	     (backface-cull)
 	     ;; (wireframe)))
-	     (rasterize))))
+	     (rasterize)))
 
 ;; (%close-window)
 
