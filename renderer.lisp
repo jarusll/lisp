@@ -73,12 +73,12 @@
 		      (vector-push-extend (apply #'make-face
 						 (loop repeat 3
 						       for v-vt-vn = (symbol-name (read s))
-						       for axis in '(:v0 :v1 :v2)
+						       for vertex in '(:v0 :v1 :v2)
 						       appending
 						       (list
-							axis
-							(parse-integer v-vt-vn 
-								       :junk-allowed t))))
+							vertex
+							(1- (parse-integer v-vt-vn ; make faces 0 indexed
+									   :junk-allowed t)))))
 					  *faces*)))))))
 
 (defun transform-vector3(v m)
@@ -275,9 +275,9 @@
 			 (,end ,start))
 		       while (and start mid end)
 		       doing
-			  (let* ((v1 (aref *vertices* (1- v0-index)))
-				 (v2 (aref *vertices* (1- v1-index)))
-				 (v3 (aref *vertices* (1- v2-index)))
+			  (let* ((v1 (aref *vertices* v0-index))
+				 (v2 (aref *vertices* v1-index))
+				 (v3 (aref *vertices* v2-index))
 				 (v3-to-v2 (vector-sub v2 v3))
 				 (v2-to-v1 (vector-sub v1 v2))
 				 (face-normal (cross v3-to-v2 v2-to-v1))
@@ -309,9 +309,9 @@
 		      (mid (aref *projected-vertices* v1-index))
 		      (end (aref *projected-vertices* v2-index)))
 		 (if  (and start mid end)
-		      (let* ((v1 (aref *vertices* (1- v0-index)))
-			     (v2 (aref *vertices* (1- v1-index)))
-			     (v3 (aref *vertices* (1- v2-index))))
+		      (let* ((v1 (aref *vertices* v0-index))
+			     (v2 (aref *vertices* v1-index))
+			     (v3 (aref *vertices* v2-index)))
 			(vector-sub-into v1-to-v2 v2 v1)
 			(vector-sub-into v1-to-v3 v3 v1)
 			(cross-into face-normal v1-to-v2 v1-to-v3)
@@ -364,12 +364,15 @@
 				      do (pixel px py +pixel+))))))))))))
 
 
+(dotimes (i (length *vertices*))
+  (setf (aref *projected-vertices* i)
+	(make-vector2)))
 
 (display #'(lambda()
-	     (loop 		     
+	     (loop
 	       initially (clear-framebuffer)
- 		 initially (adjust-array *projected-vertices* (1+ (length *vertices*)))
- 		 initially (setf (fill-pointer *projected-vertices*) (1+ (length *vertices*)))
+ 		 initially (adjust-array *projected-vertices* (length *vertices*))
+ 		 initially (setf (fill-pointer *projected-vertices*) (length *vertices*))
 	       with view-matrix = (with-members(x y z) (camera-position *camera*) vector3
 				    (with-members(forward right up) (camera-basis) basis
 				      (with-members ((x fx) (y fy) (z fz)) forward vector3
@@ -382,7 +385,7 @@
 						       (0  0  0  1)))
 					     (translate-matrix! (- x) (- y) (- z))))))))
 	       with new-point = (make-vector3)
-	       for index from 1
+	       for index from 0
 	       for point across *vertices*
 	       doing
 		  (transform-vector3-into new-point point view-matrix)
@@ -392,17 +395,18 @@
 		      (let* ((projected-z (* (/ z x) *focal-length*))
 			     (projected-y (* (/ y x) *focal-length*))
 			     (projected-x-center (+ projected-z (/ *framebuffer-width* 2)))
-			     (projected-y-center (+ projected-y (/ *framebuffer-height* 2)))
-			     (screen-x  (truncate projected-x-center))
-			     (screen-y  (truncate projected-y-center)))
+			     (projected-y-center (+ projected-y (/ *framebuffer-height* 2))))
+			;; (screen-x  (truncate projected-x-center))
+			;; (screen-y  (truncate projected-y-center)))
 			;; (pixel screen-x screen-y +pixel+)
-			(setf (aref *projected-vertices* index) ; save the projection
-			      (make-vector2 :x projected-x-center :y projected-y-center))))
+			(with-members ((x pjx) (y pjy)) (aref *projected-vertices* index) vector2 ; save the projection
+			  (setf pjx projected-x-center
+				pjy projected-y-center))))
 		    (when (<= x +near-plane+)
 		      (setf (aref *projected-vertices* index) nil))))
 	     (backface-cull)
 	     ;; (wireframe)))
-	     (rasterize)))
+	     (rasterize))))
 
 ;; (%close-window)
 
