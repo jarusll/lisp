@@ -11,7 +11,8 @@
        (max min value)))
 
 (defun deg->rad (degrees)
-  (* degrees (/ pi 180.0)))
+  (* degrees
+     (/ (float pi 1.0f0) 180.0f0)))
 
 (defun wrap-around-zero(value max &optional (min 0))
   (wrap value min max))
@@ -54,9 +55,9 @@
 (defmacro v!(&rest items)
     (destructuring-bind (x y &optional z w) items
         (case (length items)
-            (2 `(make-vector2 :x ,x :y ,y))
-            (3 `(make-vector3 :x ,x :y ,y :z ,z))
-            (4 `(make-vector4 :x ,x :y ,y :z ,z :w ,w)))))
+            (2 `(make-vector2 :x (coerce ,x 'single-float) :y (coerce ,y 'single-float)))
+            (3 `(make-vector3 :x (coerce ,x 'single-float) :y (coerce ,y 'single-float) :z (coerce ,z 'single-float)))
+            (4 `(make-vector4 :x (coerce ,x 'single-float) :y (coerce ,y 'single-float) :z (coerce ,z 'single-float) :w (coerce ,w 'single-float))))))
 
 (defgeneric vector+(a b))
 (defgeneric vector-(a b))
@@ -210,10 +211,10 @@
                     '(0 0 0 0)))
         (r3 (append (coerce (or (nth 3 rows) '()) 'list)
                     '(0 0 0 0))))
-    `(make-matrix :m0 ,(nth 0 r0) :m4 ,(nth 1 r0) :m8 ,(nth 2 r0) :m12 ,(nth 3 r0)
-                  :m1 ,(nth 0 r1) :m5 ,(nth 1 r1) :m9 ,(nth 2 r1) :m13 ,(nth 3 r1)
-                  :m2 ,(nth 0 r2) :m6 ,(nth 1 r2) :m10 ,(nth 2 r2) :m14 ,(nth 3 r2)
-                  :m3 ,(nth 0 r3) :m7 ,(nth 1 r3) :m11 ,(nth 2 r3) :m15 ,(nth 3 r3))))
+    `(make-matrix :m0 (coerce ,(nth 0 r0) 'single-float) :m4 (coerce ,(nth 1 r0) 'single-float) :m8 (coerce ,(nth 2 r0) 'single-float) :m12 (coerce ,(nth 3 r0) 'single-float)
+                  :m1 (coerce ,(nth 0 r1) 'single-float) :m5 (coerce ,(nth 1 r1) 'single-float) :m9 (coerce ,(nth 2 r1) 'single-float) :m13 (coerce ,(nth 3 r1) 'single-float)
+                  :m2 (coerce ,(nth 0 r2) 'single-float) :m6 (coerce ,(nth 1 r2) 'single-float) :m10 (coerce ,(nth 2 r2) 'single-float) :m14 (coerce ,(nth 3 r2) 'single-float)
+                  :m3 (coerce ,(nth 0 r3) 'single-float) :m7 (coerce ,(nth 1 r3) 'single-float) :m11 (coerce ,(nth 2 r3) 'single-float) :m15 (coerce ,(nth 3 r3) 'single-float))))
 
 (defun matrix* (a b)
   (with-members (m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) a matrix
@@ -471,8 +472,8 @@
     (y :float))
 
 (defstruct vector2
-    x
-    y)
+    (x 0.0 :type single-float)
+    (y 0.0 :type single-float))
 
 (defmethod translate-into-foreign-memory
     ((value vector2) (type vector2-type) pointer)
@@ -497,9 +498,9 @@
     (z :float))
 
 (defstruct vector3
-    x
-    y
-    z)
+    (x 0.0 :type single-float)
+    (y 0.0 :type single-float)
+    (z 0.0 :type single-float))
 
 (defmethod translate-into-foreign-memory
     ((value vector3) (type vector3-type) pointer)
@@ -511,7 +512,7 @@
 
 (defmethod translate-from-foreign (ptr (type vector3-type))
   (with-foreign-slots ((x y z) ptr (:struct %Vector3))
-    (make-vector3 :x x :y y :z z)))
+    (make-vector3 :x (coerce x 'single-float) :y (coerce y 'single-float) :z (coerce z 'single-float))))
 
 ; // Vector4, 4 components
 ; typedef struct Vector4 {
@@ -528,10 +529,10 @@
     (w :float))
 
 (defstruct vector4
-    x
-    y
-    z
-    w)
+    (x 0.0 :type single-float)
+    (y 0.0 :type single-float)
+    (z 0.0 :type single-float)
+    (w 0.0 :type single-float))
 
 (defmethod translate-into-foreign-memory
     ((value vector4) (type vector4-type) pointer)
@@ -544,7 +545,7 @@
 
 (defmethod translate-from-foreign (ptr (type vector4-type))
   (with-foreign-slots ((x y z w) ptr (:struct %Vector4))
-    (make-vector4 :x x :y y :z z :w w)))
+    (make-vector4 :x (coerce x 'single-float) :y (coerce y 'single-float) :z (coerce z 'single-float) :w (coerce w 'single-float))))
 
 ; // Quaternion, 4 components (Vector4 alias)
 ; typedef Vector4 Quaternion;
@@ -578,22 +579,22 @@
     (m15 :float))
 
 (defstruct matrix
-    m0
-    m4
-    m8
-    m12
-    m1
-    m5
-    m9
-    m13
-    m2
-    m6
-    m10
-    m14
-    m3
-    m7
-    m11
-    m15)
+    (m0 0.0 :type single-float)
+    (m4 0.0 :type single-float)
+    (m8 0.0 :type single-float)
+    (m12 0.0 :type single-float)
+    (m1 0.0 :type single-float)
+    (m5 0.0 :type single-float)
+    (m9 0.0 :type single-float)
+    (m13 0.0 :type single-float)
+    (m2 0.0 :type single-float)
+    (m6 0.0 :type single-float)
+    (m10 0.0 :type single-float)
+    (m14 0.0 :type single-float)
+    (m3 0.0 :type single-float)
+    (m7 0.0 :type single-float)
+    (m11 0.0 :type single-float)
+    (m15 0.0 :type single-float))
 
 (defmethod translate-into-foreign-memory
     ((value matrix) (type matrix-type) pointer)
@@ -617,10 +618,10 @@
 
 (defmethod translate-from-foreign (ptr (type matrix-type))
   (with-foreign-slots ((m0 m4 m8 m12 m1 m5 m9 m13 m2 m6 m10 m14 m3 m7 m11 m15) ptr (:struct %Matrix))
-    (make-matrix :m0 m0 :m4 m4 :m8 m8 :m12 m12
-                 :m1 m1 :m5 m5 :m9 m9 :m13 m13
-                 :m2 m2 :m6 m6 :m10 m10 :m14 m14
-                 :m3 m3 :m7 m7 :m11 m11 :m15 m15)))
+    (make-matrix :m0 (coerce m0 'single-float) :m4 (coerce m4 'single-float) :m8 (coerce m8 'single-float) :m12 (coerce m12 'single-float)
+                 :m1 (coerce m1 'single-float) :m5 (coerce m5 'single-float) :m9 (coerce m9 'single-float) :m13 (coerce m13 'single-float)
+                 :m2 (coerce m2 'single-float) :m6 (coerce m6 'single-float) :m10 (coerce m10 'single-float) :m14 (coerce m14 'single-float)
+                 :m3 (coerce m3 'single-float) :m7 (coerce m7 'single-float) :m11 (coerce m11 'single-float) :m15 (coerce m15 'single-float))))
 
 ; // Color, 4 components, R8G8B8A8 (32bit)
 ; typedef struct Color {
@@ -5702,7 +5703,7 @@ Unannotated args pass through unchanged."
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (- (,accessor a)
 							   (,accessor b))))))
-       (defmethod vector*((a number) (v ,v-type))
+       (defmethod vector*((a single-float) (v ,v-type))
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (* a
 							   (,accessor v))))))
@@ -5711,6 +5712,7 @@ Unannotated args pass through unchanged."
 		    collecting `(* (,accessor a)
 				   (,accessor b)))))
        (defmethod magnitude ((v ,v-type))
+	 (declare (values single-float))
 	 (sqrt (dot v v)))
        (defmethod normalize ((v ,v-type))
 	 (vector* (/ (magnitude v)) v)))))
