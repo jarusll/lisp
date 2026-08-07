@@ -259,10 +259,10 @@
 			  (let* ((v1 (aref *vertices* (1- v0-index)))
 				 (v2 (aref *vertices* (1- v1-index)))
 				 (v3 (aref *vertices* (1- v2-index)))
-				 (v3-to-v2 (vector- v2 v3))
-				 (v2-to-v1 (vector- v1 v2))
+				 (v3-to-v2 (vector-sub v2 v3))
+				 (v2-to-v1 (vector-sub v1 v2))
 				 (face-normal (cross v3-to-v2 v2-to-v1))
-				 (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
+				 (face-to-cam (vector-sub camera-position v1)) ; any of the vectors will do
 				 (dotted (dot face-normal face-to-cam))
 				 (is-facing-camera? (> dotted 0)))
 			    (if is-facing-camera?
@@ -279,6 +279,10 @@
   (loop for f across *faces*
 	  initially (setf (fill-pointer *backface-culled-faces*) 0)
 	  initially (adjust-array *backface-culled-faces* (length *faces*))
+	with v1-to-v2 = (make-vector3)
+	with v1-to-v3 = (make-vector3)
+	with face-normal = (make-vector3)
+	with face-to-cam = (make-vector3)
 	doing
 	   (with-members ((position camera-position)) *camera* camera
 	     (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index)) f face
@@ -288,14 +292,12 @@
 		 (if  (and start mid end)
 		      (let* ((v1 (aref *vertices* (1- v0-index)))
 			     (v2 (aref *vertices* (1- v1-index)))
-			     (v3 (aref *vertices* (1- v2-index)))
-			     (v1-to-v2 (vector- v2 v1))
-			     (v1-to-v3 (vector- v3 v1))
-			     (face-normal (cross v1-to-v2 v1-to-v3))
-			     (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
-			     (dotted (dot face-normal face-to-cam))
-			     (is-facing-camera? (> dotted 0)))
-			(if is-facing-camera?
+			     (v3 (aref *vertices* (1- v2-index))))
+			(vector-sub-into v1-to-v2 v2 v1)
+			(vector-sub-into v1-to-v3 v3 v1)
+			(cross-into face-normal v1-to-v2 v1-to-v3)
+			(vector-sub-into face-to-cam camera-position v1) ; any of the vectors will do
+			(if (> (dot face-normal face-to-cam) 0.0)
 			    (vector-push-extend f *backface-culled-faces*)))))))))
 
 
