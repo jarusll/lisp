@@ -19,6 +19,13 @@
   right
   up)
 
+(defstruct face
+  "Stores index of the vertices in *vertices*"
+  
+  (v0 0 :type fixnum)
+  (v1 0 :type fixnum)
+  (v2 0 :type fixnum))
+
 (defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
 (defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
 (defparameter +camera-position-initial+ (v! -5.0 0.0 1.0))
@@ -35,7 +42,7 @@
 (defparameter *framebuffer-width* 600)
 (defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0)) ; 1 indexed
-(defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0))
+(defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+))
 (defparameter *camera* (make-camera :position +camera-position-initial+
 				    :yaw 0.0
@@ -47,7 +54,7 @@
 (defparameter *backface-culled-faces* (make-array 2000 :adjustable t :fill-pointer 0))
 
 ;; load vertices & faces from file
-(with-open-file (obj-stream "cube.obj")
+(with-open-file (obj-stream "african_head.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
   (setf (fill-pointer *projected-vertices*) 0)
@@ -63,10 +70,10 @@
 			(vector-push-extend (v! x y z) *vertices*))))
 		   ((string= "f " line :end1 2 :end2 2) ; collect only the vertex indices for faces
 		    (with-input-from-string (s (subseq line 2))
-		      (vector-push-extend (apply #'make-vector3
+		      (vector-push-extend (apply #'make-face
 						 (loop repeat 3
 						       for v-vt-vn = (symbol-name (read s))
-						       for axis in '(:x :y :z)
+						       for axis in '(:v0 :v1 :v2)
 						       appending
 						       (list
 							axis
@@ -236,22 +243,22 @@
       (setf (aref *framebuffer* x y) +bg+))))
 
 (defun wireframe()
-  (loop for face across *faces*
+  (loop for f across *faces*
 	doing
 	   (with-members ((position camera-position)) *camera* camera
-	     (with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
-	       (let* ((start (aref *projected-vertices* v1-index))
-		      (mid (aref *projected-vertices* v2-index))
-		      (end (aref *projected-vertices* v3-index)))
+	     (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index)) f face
+	       (let* ((start (aref *projected-vertices* v0-index))
+		      (mid (aref *projected-vertices* v1-index))
+		      (end (aref *projected-vertices* v2-index)))
 		 (loop for (p0 p1) in
 		       `((,start ,mid)
 			 (,mid ,end)
 			 (,end ,start))
 		       while (and start mid end)
 		       doing
-			  (let* ((v1 (aref *vertices* (1- v1-index)))
-				 (v2 (aref *vertices* (1- v2-index)))
-				 (v3 (aref *vertices* (1- v3-index)))
+			  (let* ((v1 (aref *vertices* (1- v0-index)))
+				 (v2 (aref *vertices* (1- v1-index)))
+				 (v3 (aref *vertices* (1- v2-index)))
 				 (v3-to-v2 (vector- v2 v3))
 				 (v2-to-v1 (vector- v1 v2))
 				 (face-normal (cross v3-to-v2 v2-to-v1))
@@ -269,32 +276,27 @@
 							       (pixel x-p y-p +fg+)))))))))))))
 
 (defun backface-cull()
-  (loop for face across *faces*
+  (loop for f across *faces*
 	  initially
 	     (setf (fill-pointer *backface-culled-faces*) 0)
 	doing
 	   (with-members ((position camera-position)) *camera* camera
-	     (with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
-	       (let* ((start (aref *projected-vertices* v1-index))
-		      (mid (aref *projected-vertices* v2-index))
-		      (end (aref *projected-vertices* v3-index)))
-		 (loop for (p0 p1) in
-		       `((,start ,mid)
-			 (,mid ,end)
-			 (,end ,start))
-		       while (and start mid end)
-		       doing
-			  (let* ((v1 (aref *vertices* (1- v1-index)))
-				 (v2 (aref *vertices* (1- v2-index)))
-				 (v3 (aref *vertices* (1- v3-index)))
-				 (v3-to-v2 (vector- v2 v3))
-				 (v2-to-v1 (vector- v1 v2))
-				 (face-normal (cross v3-to-v2 v2-to-v1))
-				 (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
-				 (dotted (dot face-normal face-to-cam))
-				 (is-facing-camera? (> dotted 0)))
-			    (if is-facing-camera?
-				(vector-push-extend face *backface-culled-faces*)))))))))
+	     (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index)) f face
+	       (let* ((start (aref *projected-vertices* v0-index))
+		      (mid (aref *projected-vertices* v1-index))
+		      (end (aref *projected-vertices* v2-index)))
+		 (if  (and start mid end)
+		      (let* ((v1 (aref *vertices* (1- v0-index)))
+			     (v2 (aref *vertices* (1- v1-index)))
+			     (v3 (aref *vertices* (1- v2-index)))
+			     (v1-to-v2 (vector- v2 v1))
+			     (v1-to-v3 (vector- v3 v1))
+			     (face-normal (cross v1-to-v2 v1-to-v3))
+			     (face-to-cam (vector- camera-position v1)) ; any of the vectors will do
+			     (dotted (dot face-normal face-to-cam))
+			     (is-facing-camera? (> dotted 0)))
+			(if is-facing-camera?
+			    (vector-push-extend f *backface-culled-faces*)))))))))
 				
 
 (defun solve-linear-2x2 (l1 l2 r)
@@ -309,12 +311,12 @@
 	  
 
 (defun rasterize()
-  (loop for face across *backface-culled-faces*
+  (loop for f across *backface-culled-faces*
 	doing
-	   (with-members ((x v1-index) (y v2-index) (z v3-index)) face vector3
-	     (let* ((v1 (aref *projected-vertices* v1-index))
-		    (v2 (aref *projected-vertices* v2-index))
-		    (v3 (aref *projected-vertices* v3-index)))
+	   (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index)) f face
+	     (let* ((v1 (aref *projected-vertices* v0-index))
+		    (v2 (aref *projected-vertices* v1-index))
+		    (v3 (aref *projected-vertices* v2-index)))
 	       (and v1 v2 v3
 		    (with-members ((x v1-x) (y v1-y)) v1 vector2
 		      (with-members ((x v2-x) (y v2-y)) v2 vector2
@@ -374,7 +376,7 @@
 		     (when (<= x +near-plane+)
 		       (setf (aref *projected-vertices* index) nil)))
 	     (backface-cull)
-	     (time (rasterize))))
 	     ;; (wireframe)))
+	     (rasterize)))
 	     
  ;; (%close-window)
