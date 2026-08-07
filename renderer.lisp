@@ -160,7 +160,7 @@
 
 (defun display(painter)
   (with-window *framebuffer-width* *framebuffer-height* "Framebuffer"
-    (%set-target-fps 30)
+    (%set-target-fps 60)
     (%disable-cursor)
     (with-members (position yaw pitch) *camera* camera
       (setf position +camera-position-initial+
@@ -336,6 +336,11 @@
 	   :x (/ (- (* c e) (* b f)) det)
 	   :y (/ (- (* a f) (* c d)) det)))))))
 
+(declaim
+ (ftype (function (vector2 vector2)
+                  (values single-float single-float single-float))
+        edge-function-coefficients))
+
 (defun edge-function-coefficients(v0 v1)
   "Takes 2 vector2 and returns the multiple value(edge-function dx dy)"
   
@@ -361,6 +366,7 @@
 				 (bottom (floor (min v1-y v2-y v3-y)))
 				 (left (floor (min v1-x v2-x v3-x)))
 				 (right (ceiling (max v1-x v2-x v3-x))))
+			    (declare (type fixnum top bottom left right))
 			    (multiple-value-bind (v1-to-v2-A v1-to-v2-B v1-to-v2-C)
 				(edge-function-coefficients v1 v2)
 			      (multiple-value-bind (v2-to-v3-A v2-to-v3-B v2-to-v3-C)
@@ -379,9 +385,9 @@
 						   with captured-row-v1-to-v2 = row-v1-to-v2
 						   with captured-row-v2-to-v3 = row-v2-to-v3
 						   with captured-row-v3-to-v1 = row-v3-to-v1
-						   when (and (> captured-row-v1-to-v2 0.0)
-							     (> captured-row-v2-to-v3 0.0)
-							     (> captured-row-v3-to-v1 0.0))
+						   when (and (> captured-row-v1-to-v2 0.0f0)
+							     (> captured-row-v2-to-v3 0.0f0)
+							     (> captured-row-v3-to-v1 0.0f0))
 						     do (pixel px py +pixel+)
 						   doing
 						      (incf captured-row-v1-to-v2 v1-to-v2-A)
@@ -429,7 +435,7 @@
 		      (setf (aref *projected-vertices* index) nil))))
 	     (backface-cull)
 	     ;; (wireframe)))
-	     (time (rasterize))))
+	     (rasterize)))
 
 ;; (%close-window)
 
