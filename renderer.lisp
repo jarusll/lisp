@@ -336,6 +336,15 @@
 	   :x (/ (- (* c e) (* b f)) det)
 	   :y (/ (- (* a f) (* c d)) det)))))))
 
+(defun edge-function-coefficients(v0 v1)
+  "Takes 2 vector2 and returns the multiple value(edge-function dx dy)"
+  
+  (with-members ((x x0) (y y0)) v0 vector2
+    (with-members ((x x1) (y y1)) v1 vector2
+      (let ((a (- y0 y1))
+	    (b (- x1 x0))
+	    (c (- (* x0 y1) (* x1 y0))))
+	(values a b c)))))
 
 (defun rasterize()
   (loop for f across *backface-culled-faces*
@@ -351,23 +360,36 @@
  			  (let* ((top (ceiling (max v1-y v2-y v3-y)))
 				 (bottom (floor (min v1-y v2-y v3-y)))
 				 (left (floor (min v1-x v2-x v3-x)))
-				 (right (ceiling (max v1-x v2-x v3-x)))
-				 (e1x (- v2-x v1-x))
-				 (e1y (- v2-y v1-y))
-				 (e2x (- v3-x v1-x))
-				 (e2y (- v3-y v1-y))
-				 (det (- (* e1x e2y) (* e2x e1y))))
-			    (loop for px from left to right do
-			      (loop for py from bottom to top
-				    for tox = (- px v1-x)
-				    for toy = (- py v1-y)
-				    for beta = (/ (- (* tox e2y) (* e2x toy)) det)
-				    for gamma = (/ (- (* e1x toy) (* tox e1y)) det)
-				    for alpha = (- 1 beta gamma +epsilon+)
-				    when (and (plusp alpha)
-					      (plusp beta)
-					      (plusp gamma))
-				      do (pixel px py +pixel+))))))))))))
+				 (right (ceiling (max v1-x v2-x v3-x))))
+			    (multiple-value-bind (v1-to-v2-A v1-to-v2-B v1-to-v2-C)
+				(edge-function-coefficients v1 v2)
+			      (multiple-value-bind (v2-to-v3-A v2-to-v3-B v2-to-v3-C)
+				  (edge-function-coefficients v2 v3)
+				(multiple-value-bind (v3-to-v1-A v3-to-v1-B v3-to-v1-C)
+				    (edge-function-coefficients v3 v1)
+				  (let ((initial-v1-to-v2 (+ (* v1-to-v2-A left) (* v1-to-v2-B bottom) v1-to-v2-C))
+					(initial-v2-to-v3 (+ (* v2-to-v3-A left) (* v2-to-v3-B bottom) v2-to-v3-C))
+					(initial-v3-to-v1 (+ (* v3-to-v1-A left) (* v3-to-v1-B bottom) v3-to-v1-C)))
+				    (loop for py from bottom to top
+					  with row-v1-to-v2 = initial-v1-to-v2
+					  with row-v2-to-v3 = initial-v2-to-v3
+					  with row-v3-to-v1 = initial-v3-to-v1
+					  do
+					     (loop for px from left to right
+						   with captured-row-v1-to-v2 = row-v1-to-v2
+						   with captured-row-v2-to-v3 = row-v2-to-v3
+						   with captured-row-v3-to-v1 = row-v3-to-v1
+						   when (and (> captured-row-v1-to-v2 0.0)
+							     (> captured-row-v2-to-v3 0.0)
+							     (> captured-row-v3-to-v1 0.0))
+						     do (pixel px py +pixel+)
+						   doing
+						      (incf captured-row-v1-to-v2 v1-to-v2-A)
+						      (incf captured-row-v2-to-v3 v2-to-v3-A)
+						      (incf captured-row-v3-to-v1 v3-to-v1-A))
+					     (incf row-v1-to-v2 v1-to-v2-B)
+					     (incf row-v2-to-v3 v2-to-v3-B)
+					     (incf row-v3-to-v1 v3-to-v1-B)))))))))))))))
 
 (display #'(lambda()
 	     (loop
@@ -407,7 +429,7 @@
 		      (setf (aref *projected-vertices* index) nil))))
 	     (backface-cull)
 	     ;; (wireframe)))
-	     (rasterize)))
+	     (time (rasterize))))
 
 ;; (%close-window)
 
