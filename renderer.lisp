@@ -321,25 +321,26 @@
 		    (with-members ((x v1-x) (y v1-y)) v1 vector2
 		      (with-members ((x v2-x) (y v2-y)) v2 vector2
 			(with-members ((x v3-x) (y v3-y)) v3 vector2
-			  (let ((top (ceiling (max v1-y v2-y v3-y)))
+ 			  (let* ((top (ceiling (max v1-y v2-y v3-y)))
 				(bottom (floor (min v1-y v2-y v3-y)))
 				(left (floor (min v1-x v2-x v3-x)))
 				(right (ceiling (max v1-x v2-x v3-x)))
-				(e1 (vector- v2 v1))
-				(e2 (vector- v3 v1)))
+				(e1x (- v2-x v1-x))
+				(e1y (- v2-y v1-y))
+				(e2x (- v3-x v1-x))
+				(e2y (- v3-y v1-y))
+				(det (- (* e1x e2y) (* e2x e1y))))
 			    (loop for px from left to right do
 			      (loop for py from bottom to top
-				    for v1-to-pixel = (vector- (v! px py) v1)
-				    for solved = (solve-linear-2x2 e1 e2 v1-to-pixel)
-				    doing
-				       (with-members ((x beta) (y gamma))
-					   solved 
-					   vector2
-					 (let* ((alpha (- 1 beta gamma +epsilon+)))
-					   (when (and (plusp alpha)
-						      (plusp beta)
-						      (plusp gamma))
-					     (pixel px py (color! 255 0 0 255))))))))))))))))
+				    for tox = (- px v1-x)
+				    for toy = (- py v1-y)
+				    for beta = (/ (- (* tox e2y) (* e2x toy)) det)
+				    for gamma = (/ (- (* e1x toy) (* tox e1y)) det)
+				    for alpha = (- 1 beta gamma +epsilon+)
+				    when (and (plusp alpha)
+					      (plusp beta)
+					      (plusp gamma))
+				    do (pixel px py +pixel+))))))))))))
 						
 					  
 	
@@ -379,4 +380,10 @@
 	     ;; (wireframe)))
 	     (rasterize)))
 	     
- ;; (%close-window)
+;; (%close-window)
+
+(require 'sb-sprof)
+(sb-sprof:with-profiling (:mode :alloc)
+  (dotimes (i 1000)
+    (rasterize)))
+(sb-sprof:report)
