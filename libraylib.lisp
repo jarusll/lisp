@@ -5700,14 +5700,23 @@ Unannotated args pass through unchanged."
 	      az zp)
 	v1))))
 
+(defmethod cross-into((dest vector3) (v1 vector3) (v2 vector3))
+  (vector-copyf dest v1)
+  (crossf dest v2)
+  dest)
+
 (defmacro defvector-ops(v-type v-members) ; vector3 (x y z)
   (let* ((typename (symbol-name v-type)) ; v-type = vector3, typename = "VECTOR3"
 	 (make-type-symbol (intern (concatenate 'string "MAKE-" typename))) ; "MAKE-VECTOR3"
 	 (members-accessors (loop for member in v-members ; ((:x vector3-x)...)
-				collecting
-				(list (intern (symbol-name member) :keyword)
-				      (intern (concatenate 'string typename "-" (symbol-name member)))))))
+				  collecting
+				  (list (intern (symbol-name member) :keyword)
+					(intern (concatenate 'string typename "-" (symbol-name member)))))))
     `(progn
+       (defmethod vector-copyf((new ,v-type) (old ,v-type))
+	 (setf ,@(loop for (member accessor) in members-accessors
+		       appending `((,accessor new) (,accessor old))))
+	 new)
        (defmethod vector-add((a ,v-type) (b ,v-type))
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (+ (,accessor a)
@@ -5717,24 +5726,36 @@ Unannotated args pass through unchanged."
 		       appending `((,accessor a) (+ (,accessor a)
 						    (,accessor b)))))
 	 a)
+       (defmethod vector-add-into((dest ,v-type) (a ,v-type) (b ,v-type))
+	 (vector-copyf dest a)
+	 (vector-addf dest b)
+	 dest)
        (defmethod vector-sub((a ,v-type) (b ,v-type))
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (- (,accessor a)
 							   (,accessor b))))))
-       (defmethod vector-subf((a ,v-type) (b ,v-type))
-	 (setf ,@(loop for (member accessor) in members-accessors
-		       appending `((,accessor a) (- (,accessor a)
-						    (,accessor b)))))
-	 a)
+        (defmethod vector-subf((a ,v-type) (b ,v-type))
+ 	 (setf ,@(loop for (member accessor) in members-accessors
+ 		       appending `((,accessor a) (- (,accessor a)
+ 						    (,accessor b)))))
+ 	 a)
+        (defmethod vector-sub-into((dest ,v-type) (a ,v-type) (b ,v-type))
+ 	 (vector-copyf dest a)
+ 	 (vector-subf dest b)
+ 	 dest)
        (defmethod vector-mul((a single-float) (v ,v-type))
 	 (,make-type-symbol ,@(loop for (member accessor) in members-accessors
 				    appending `(,member (* a
 							   (,accessor v))))))
-       (defmethod vector-mulf((a single-float) (v ,v-type))
-	 (setf ,@(loop for (member accessor) in members-accessors
-		       appending `((,accessor v) (* a
-						    (,accessor v)))))
-	 v)
+        (defmethod vector-mulf((a single-float) (v ,v-type))
+ 	 (setf ,@(loop for (member accessor) in members-accessors
+ 		       appending `((,accessor v) (* a
+ 						    (,accessor v)))))
+ 	 v)
+        (defmethod vector-mul-into((dest ,v-type) (a single-float) (v ,v-type))
+ 	 (vector-copyf dest v)
+ 	 (vector-mulf a dest)
+ 	 dest)
        (defmethod dot((a ,v-type) (b ,v-type))
 	 (declare (values single-float))
 	 (+ ,@(loop for (member accessor) in members-accessors
