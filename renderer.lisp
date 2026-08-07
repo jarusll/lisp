@@ -28,7 +28,7 @@
 
 (defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
 (defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
-(defparameter +camera-position-initial+ (v! -5.0 0.0 1.0))
+(defparameter +camera-position-initial+ (v! -100.0 0.0 1.0))
 (defparameter +bg+ (color! 255 255 255 255))
 (defparameter +fg+ (color! 0 0 0 255))
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
@@ -54,7 +54,7 @@
 (defparameter *backface-culled-faces* (make-array 2000 :adjustable t :fill-pointer 0))
 
 ;; load vertices & faces from file
-(with-open-file (obj-stream "african_head.obj")
+(with-open-file (obj-stream "sponza.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
   (setf (fill-pointer *projected-vertices*) 0)
@@ -187,7 +187,7 @@
 				      backward-matrix))))))
 		       (let* ((right-direction (camera-right))
 			      (right-scaled (vector* (* *camera-speed* dt)
-						       right-direction)))
+						     right-direction)))
 			 (with-members ((x rx) (y ry) (z rz)) right-scaled vector3
 			   (when right
 			     (let ((right-matrix (translate-matrix! rx ry rz)))
@@ -203,7 +203,7 @@
 				      left-matrix))))))
 		       (let* ((up-direction +world-up+)
 			      (up-scaled (vector* (* *camera-speed* dt)
-						       up-direction)))
+						  up-direction)))
 			 (with-members ((x ux) (y uy) (z uz)) up-scaled vector3
 			   (when up
 			     (let ((up-matrix (translate-matrix! ux uy uz)))
@@ -273,12 +273,12 @@
 					       (truncate x1)
 					       (truncate y1)
 					       #'(lambda(x-p y-p)
-							       (pixel x-p y-p +fg+)))))))))))))
+						   (pixel x-p y-p +fg+)))))))))))))
 
 (defun backface-cull()
   (loop for f across *faces*
-	  initially
-	     (setf (fill-pointer *backface-culled-faces*) 0)
+	  initially (setf (fill-pointer *backface-culled-faces*) 0)
+	  initially (adjust-array *backface-culled-faces* (length *faces*))
 	doing
 	   (with-members ((position camera-position)) *camera* camera
 	     (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index)) f face
@@ -297,7 +297,7 @@
 			     (is-facing-camera? (> dotted 0)))
 			(if is-facing-camera?
 			    (vector-push-extend f *backface-culled-faces*)))))))))
-				
+
 
 (defun solve-linear-2x2 (l1 l2 r)
   (with-members ((x a) (y d)) l1 vector2
@@ -308,7 +308,7 @@
 	  (make-vector2
 	   :x (/ (- (* c e) (* b f)) det)
 	   :y (/ (- (* a f) (* c d)) det)))))))
-	  
+
 
 (defun rasterize()
   (loop for f across *backface-culled-faces*
@@ -322,14 +322,14 @@
 		      (with-members ((x v2-x) (y v2-y)) v2 vector2
 			(with-members ((x v3-x) (y v3-y)) v3 vector2
  			  (let* ((top (ceiling (max v1-y v2-y v3-y)))
-				(bottom (floor (min v1-y v2-y v3-y)))
-				(left (floor (min v1-x v2-x v3-x)))
-				(right (ceiling (max v1-x v2-x v3-x)))
-				(e1x (- v2-x v1-x))
-				(e1y (- v2-y v1-y))
-				(e2x (- v3-x v1-x))
-				(e2y (- v3-y v1-y))
-				(det (- (* e1x e2y) (* e2x e1y))))
+				 (bottom (floor (min v1-y v2-y v3-y)))
+				 (left (floor (min v1-x v2-x v3-x)))
+				 (right (ceiling (max v1-x v2-x v3-x)))
+				 (e1x (- v2-x v1-x))
+				 (e1y (- v2-y v1-y))
+				 (e2x (- v3-x v1-x))
+				 (e2y (- v3-y v1-y))
+				 (det (- (* e1x e2y) (* e2x e1y))))
 			    (loop for px from left to right do
 			      (loop for py from bottom to top
 				    for tox = (- px v1-x)
@@ -340,26 +340,28 @@
 				    when (and (plusp alpha)
 					      (plusp beta)
 					      (plusp gamma))
-				    do (pixel px py +pixel+))))))))))))
-						
-					  
-	
+				      do (pixel px py +pixel+))))))))))))
+
+
+
 (display #'(lambda()
-	     (loop
+	     (loop 		     
 	       initially (clear-framebuffer)
-	       for point across *vertices*
+ 		 initially (adjust-array *projected-vertices* (1+ (length *vertices*)))
+ 		 initially (setf (fill-pointer *projected-vertices*) (1+ (length *vertices*)))
+	       with view-matrix = (with-members(x y z) (camera-position *camera*) vector3
+				    (with-members(forward right up) (camera-basis) basis
+				      (with-members ((x fx) (y fy) (z fz)) forward vector3
+					(with-members ((x rx) (y ry) (z rz)) right vector3
+					  (with-members ((x ux) (y uy) (z uz)) up vector3
+					    (matrix*
+					     (matrix! ((fx fy fz 0)
+						       (ux uy uz 0)
+						       (rx ry rz 0)
+						       (0  0  0  1)))
+					     (translate-matrix! (- x) (- y) (- z))))))))
 	       for index from 1
-	       for view-matrix = (with-members(x y z) (camera-position *camera*) vector3
-				   (with-members(forward right up) (camera-basis) basis
-				     (with-members ((x fx) (y fy) (z fz)) forward vector3
-				       (with-members ((x rx) (y ry) (z rz)) right vector3
-					 (with-members ((x ux) (y uy) (z uz)) up vector3
-					   (matrix*
-					    (matrix! ((fx fy fz 0)
-						      (ux uy uz 0)
-						      (rx ry rz 0)
-						      (0  0  0  1)))
-					    (translate-matrix! (- x) (- y) (- z))))))))
+	       for point across *vertices*
 	       for new-point = (transform-vector-3 point view-matrix)
 	       for x = (vector3-x new-point)
 	       for y = (vector3-y new-point)
@@ -377,13 +379,13 @@
 		     (when (<= x +near-plane+)
 		       (setf (aref *projected-vertices* index) nil)))
 	     (backface-cull)
-	     ;; (wireframe)))
-	     (rasterize)))
-	     
+	     (wireframe)))
+	     ;; (rasterize)))
+
 ;; (%close-window)
 
-(require 'sb-sprof)
-(sb-sprof:with-profiling (:mode :alloc)
-  (dotimes (i 1000)
-    (rasterize)))
-(sb-sprof:report)
+;; (require 'sb-sprof)
+;; (sb-sprof:with-profiling (:mode :alloc)
+;;   (dotimes (i 1000)
+;;     (rasterize)))
+;; (sb-sprof:report)
