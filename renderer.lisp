@@ -20,11 +20,17 @@
   up)
 
 (defstruct face
-  "Stores index of the vertices in *vertices*"
-  
+  #|
+    Stores index of the vertices in *vertices* 
+    Store index of vertex texture coords in *vertex-textures*
+  |#
+   
   (v0 0 :type fixnum)
   (v1 0 :type fixnum)
-  (v2 0 :type fixnum))
+  (v2 0 :type fixnum)
+  (v0-t 0 :type fixnum)
+  (v1-t 0 :type fixnum)
+  (v2-t 0 :type fixnum))
 
 (defstruct projected-vertex
   (x 0.0 :type single-float)
@@ -77,6 +83,7 @@
 (with-open-file (obj-stream "african_head.obj")
   (setf (fill-pointer *vertices*) 0)
   (setf (fill-pointer *faces*) 0)
+  (setf (fill-pointer *vertex-textures*) 0)
   (setf (fill-pointer *projected-vertices*) 0)
   (loop for line = (read-line obj-stream nil)
 	while line
@@ -93,12 +100,14 @@
 		      (vector-push-extend (apply #'make-face
 						 (loop repeat 3
 						       for v-vt-vn = (symbol-name (read s))
-						       for vertex in '(:v0 :v1 :v2)
-						       appending
-						       (list
-							vertex
-							(1- (parse-integer v-vt-vn ; make faces 0 indexed
-									   :junk-allowed t)))))
+						       for split-by-slash = (uiop:split-string v-vt-vn :separator "/")
+						       for vector-index in '(:v0 :v1 :v2)
+						       for texture-index in '(:v0-t :v1-t :v2-t)
+						       ;; 0 index both
+						       for vector-value = (1- (parse-integer (first split-by-slash)))
+						       for texture-value = (1- (parse-integer (second split-by-slash)))
+						       appending (list vector-index vector-value
+								       texture-index texture-value)))
 					  *faces*)))
 		   ((string= "vt " line :end1 3 :end2 3)
 		    (with-input-from-string (s (subseq line 3))
