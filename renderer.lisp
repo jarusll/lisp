@@ -95,7 +95,7 @@
 			    (y (read s))
 			    (z (read s)))
 			(vector-push-extend (v! x y z) *vertices*))))
-		   ((string= "f " line :end1 2 :end2 2) ; collect only the vertex indices for faces
+		   ((string= "f " line :end1 2 :end2 2) 
 		    (with-input-from-string (s (subseq line 2))
 		      (vector-push-extend (apply #'make-face
 						 (loop repeat 3
@@ -288,14 +288,13 @@
 			 (repaint))))
 		   (with-drawing
 		     (%clear-background :white)
-		     (with-math-coordinates (0 *framebuffer-height*)
-		       (%draw-texture (render-texture-texture framebuffer)
-				      0
-				      0
-				      :white))
-		     (draw-fps 10 10)
+		     (%draw-texture (render-texture-texture framebuffer)
+				    0
+				    0
+				    :white)
+		     (%draw-fps 10 10)
 		     (with-members (yaw pitch) *camera* camera
-		       (draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 10 80 20 :blue)))))))))
+		       (%draw-text (format nil "Yaw ~a~%Pitch ~a" yaw pitch) 10 80 20 :blue)))))))))
 
 (defun clear-framebuffer()
   (dotimes (x *framebuffer-width*)
