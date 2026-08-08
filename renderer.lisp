@@ -46,13 +46,17 @@
 (defparameter +pixel+ (color! 0 255 0 255))
 
 (defparameter *debug-points* nil)
+(declaim (type fixnum *framebuffer-height*
+               *framebuffer-width*))
 (defparameter *framebuffer-height* 600)
 (defparameter *framebuffer-width* 600)
 (defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+))
-(defparameter *depthbuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element nil))
+(defparameter *depthbuffer* (make-array (list *framebuffer-width* *framebuffer-height*)
+					:element-type 'single-float
+					:initial-element 1000.0f0))
 (defparameter *camera* (make-camera :position +camera-position-initial+
 				    :yaw 0.0
 				    :pitch 0.0))
@@ -369,23 +373,17 @@
 
 (defun rasterize()
   (loop for f across *backface-culled-faces*
-	for face-index from 0
+	for face-index of-type fixnum from 0
 	doing
 	   (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index)) f face
 	     (let* ((v1 (aref *projected-vertices* v0-index))
 		    (v2 (aref *projected-vertices* v1-index))
-		    (v3 (aref *projected-vertices* v2-index))
-		    (h (hash32 face-index))
-		    (c (make-color
-			:r (ldb (byte 8  0) h)
-			:g (ldb (byte 8  8) h)
-			:b (ldb (byte 8 16) h)
-			:a 255)))
+		    (v3 (aref *projected-vertices* v2-index)))
 	       (and v1 v2 v3
 		    (with-members ((x v1-x) (y v1-y) (depth v1-depth)) v1 projected-vertex
 		      (with-members ((x v2-x) (y v2-y) (depth v2-depth)) v2 projected-vertex
 			(with-members ((x v3-x) (y v3-y) (depth v3-depth)) v3 projected-vertex
-			  ;; Bounding Box
+			  ;; bounding box
  			  (let* ((top (ceiling (max v1-y v2-y v3-y)))
 				 (bottom (floor (min v1-y v2-y v3-y)))
 				 (left (floor (min v1-x v2-x v3-x)))
@@ -395,17 +393,17 @@
 			    (minf right (1- *framebuffer-width*))
 			    (maxf bottom 0)
 			    (maxf left 0)
-			    ;; Get the edge function coefficients for each edge
-			    (multiple-value-bind (v1-to-v2-A v1-to-v2-B v1-to-v2-C)
+			    ;; get the edge function coefficients for each edge
+			    (multiple-value-bind (v1-to-v2-a v1-to-v2-b v1-to-v2-c)
 				(edge-function-coefficients v1 v2)
-			      (multiple-value-bind (v2-to-v3-A v2-to-v3-B v2-to-v3-C)
+			      (multiple-value-bind (v2-to-v3-a v2-to-v3-b v2-to-v3-c)
 				  (edge-function-coefficients v2 v3)
-				(multiple-value-bind (v3-to-v1-A v3-to-v1-B v3-to-v1-C)
+				(multiple-value-bind (v3-to-v1-a v3-to-v1-b v3-to-v1-c)
 				    (edge-function-coefficients v3 v1)
-				  (let ((initial-v1-to-v2 (+ (* v1-to-v2-A left) (* v1-to-v2-B bottom) v1-to-v2-C))
-					(initial-v2-to-v3 (+ (* v2-to-v3-A left) (* v2-to-v3-B bottom) v2-to-v3-C))
-					(initial-v3-to-v1 (+ (* v3-to-v1-A left) (* v3-to-v1-B bottom) v3-to-v1-C)))
-				    (let* ((triangle-area (+ (* v1-to-v2-A v3-x) (* v1-to-v2-B v3-y) v1-to-v2-C)))
+				  (let ((initial-v1-to-v2 (+ (* v1-to-v2-a left) (* v1-to-v2-b bottom) v1-to-v2-c))
+					(initial-v2-to-v3 (+ (* v2-to-v3-a left) (* v2-to-v3-b bottom) v2-to-v3-c))
+					(initial-v3-to-v1 (+ (* v3-to-v1-a left) (* v3-to-v1-b bottom) v3-to-v1-c)))
+				    (let* ((triangle-area (+ (* v1-to-v2-a v3-x) (* v1-to-v2-b v3-y) v1-to-v2-c)))
 				      (loop for py from bottom to top
 					    with row-v1-to-v2 = initial-v1-to-v2
 					    with row-v2-to-v3 = initial-v2-to-v3
@@ -426,11 +424,15 @@
 										   (* v2-weight v2-depth)
 										   (* v3-weight v3-depth)))
 								 (old-depth (aref *depthbuffer* px py)))
-							    (setf (aref *depthbuffer* px py)
-								  (min current-depth old-depth))
-							    (clampf (aref *depthbuffer* px py) 1000.0f0 0.0)
-							    (if (= current-depth (aref *depthbuffer* px py))
-								(pixel px py c)))
+							    (declare (single-float
+								      v1-weight
+								      v2-weight
+								      v3-weight
+								      current-depth
+								      old-depth))
+							    (when (< current-depth old-depth)
+							      (setf (aref *depthbuffer* px py) current-depth)
+							      (pixel px py +pixel+)))
 						     doing
 							(incf captured-row-v1-to-v2 v1-to-v2-A)
 							(incf captured-row-v2-to-v3 v2-to-v3-A)
