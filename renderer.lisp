@@ -26,6 +26,11 @@
   (v1 0 :type fixnum)
   (v2 0 :type fixnum))
 
+(defstruct projected-vertex
+  (x 0.0 :type single-float)
+  (y 0.0 :type single-float)
+  (depth 0.0 :type single-float))
+  
 (defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
 (defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
 (defparameter +camera-position-initial+ (v! -5.0 0.0 1.0))
@@ -41,9 +46,10 @@
 (defparameter *framebuffer-height* 600)
 (defparameter *framebuffer-width* 600)
 (defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
-(defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0)) ; 1 indexed
+(defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
 (defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face))
 (defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+))
+(defparameter *depthbuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element nil))
 (defparameter *camera* (make-camera :position +camera-position-initial+
 				    :yaw 0.0
 				    :pitch 0.0))
@@ -81,11 +87,11 @@
 									   :junk-allowed t)))))
 					  *faces*)))))))
 
-;; preallocate projected vertices
+;; Preallocate projected vertices
 (adjust-array *projected-vertices* (length *vertices*))
 (dotimes (i (length *vertices*))
   (setf (aref *projected-vertices* i)
-	(make-vector2)))
+	(make-projected-vertex)))
 
 (defun transform-vector3(v m)
   "Transform a Vector3 by *draw-transform* (treated as w = 1)."
@@ -337,15 +343,15 @@
 	   :y (/ (- (* a f) (* c d)) det)))))))
 
 (declaim
- (ftype (function (vector2 vector2)
+ (ftype (function (projected-vertex projected-vertex)
                   (values single-float single-float single-float))
         edge-function-coefficients))
 
 (defun edge-function-coefficients(v0 v1)
   "Takes 2 vector2 and returns the multiple value(edge-function dx dy)"
   
-  (with-members ((x x0) (y y0)) v0 vector2
-    (with-members ((x x1) (y y1)) v1 vector2
+  (with-members ((x x0) (y y0)) v0 projected-vertex
+    (with-members ((x x1) (y y1)) v1 projected-vertex
       (let ((a (- y0 y1))
 	    (b (- x1 x0))
 	    (c (- (* x0 y1) (* x1 y0))))
@@ -359,14 +365,16 @@
 		    (v2 (aref *projected-vertices* v1-index))
 		    (v3 (aref *projected-vertices* v2-index)))
 	       (and v1 v2 v3
-		    (with-members ((x v1-x) (y v1-y)) v1 vector2
-		      (with-members ((x v2-x) (y v2-y)) v2 vector2
-			(with-members ((x v3-x) (y v3-y)) v3 vector2
+		    (with-members ((x v1-x) (y v1-y) (depth v1-depth)) v1 projected-vertex
+		      (with-members ((x v2-x) (y v2-y) (depth v2-depth)) v2 projected-vertex
+			(with-members ((x v3-x) (y v3-y) (depth v3-depth)) v3 projected-vertex
+			  ;; Bounding Box
  			  (let* ((top (ceiling (max v1-y v2-y v3-y)))
 				 (bottom (floor (min v1-y v2-y v3-y)))
 				 (left (floor (min v1-x v2-x v3-x)))
 				 (right (ceiling (max v1-x v2-x v3-x))))
 			    (declare (type fixnum top bottom left right))
+			    ;; Get the edge function coefficients for each edge
 			    (multiple-value-bind (v1-to-v2-A v1-to-v2-B v1-to-v2-C)
 				(edge-function-coefficients v1 v2)
 			      (multiple-value-bind (v2-to-v3-A v2-to-v3-B v2-to-v3-C)
@@ -397,9 +405,15 @@
 					     (incf row-v2-to-v3 v2-to-v3-B)
 					     (incf row-v3-to-v1 v3-to-v1-B)))))))))))))))
 
+(defun clear-depthbuffer()
+  (dotimes (y *framebuffer-height*)
+    (dotimes (x *framebuffer-width*)
+      (setf (aref *depthbuffer* x y) nil))))
+
 (display #'(lambda()
 	     (loop
 	       initially (clear-framebuffer)
+		 initially (clear-depthbuffer)
  		 initially (adjust-array *projected-vertices* (length *vertices*))
  		 initially (setf (fill-pointer *projected-vertices*) (length *vertices*))
 	       with view-matrix = (with-members(x y z) (camera-position *camera*) vector3
@@ -428,9 +442,10 @@
 			;; (screen-x  (truncate projected-x-center))
 			;; (screen-y  (truncate projected-y-center)))
 			;; (pixel screen-x screen-y +pixel+)
-			(with-members ((x pjx) (y pjy)) (aref *projected-vertices* index) vector2 ; save the projection
+			(with-members ((x pjx) (y pjy) depth) (aref *projected-vertices* index) projected-vertex ; save the projection
 			  (setf pjx projected-x-center
-				pjy projected-y-center))))
+				pjy projected-y-center
+				depth x))))
 		    (when (<= x +near-plane+)
 		      (setf (aref *projected-vertices* index) nil))))
 	     (backface-cull)
