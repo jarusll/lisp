@@ -40,6 +40,12 @@
 (defmacro wrapf(place max &optional (min 0))
   `(setf ,place (wrap ,place ,min ,max)))
 
+(defmacro minf(place &rest args)
+  `(setf ,place (min ,place ,@args)))
+
+(defmacro maxf(place &rest args)
+  `(setf ,place (max ,place ,@args)))
+
 (defmacro with-members(members obj type &body body)
   (with-gensyms(obj-var)
     `(let ((,obj-var ,obj))
