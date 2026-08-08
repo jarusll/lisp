@@ -92,6 +92,16 @@
 	  (unwind-protect (progn ,@body)
 	    (%end-drawing))))
 
+(defmacro with-image((image image-path) &body body)
+    `(let ((,image (%load-image ,image-path)))
+       (unwind-protect (progn ,@body)
+	 (%unload-image ,image))))
+
+(defmacro with-image-colors((color image) &body body)
+  `(let ((,color (%load-image-colors ,image)))
+     (unwind-protect (progn ,@body)
+       (%unload-image-colors ,color))))
+
 (defmacro with-bindings(let-form bindings &body body)
   (if bindings
       `(,let-form ,bindings
@@ -739,6 +749,20 @@
     height
     mipmaps
     format)
+
+(defmethod translate-into-foreign-memory
+    ((value image) (type image-type) pointer)
+  (with-foreign-slots ((data width height mipmaps format) pointer (:struct %Image))
+    (with-members ((data l-data) (width l-width) (height l-height) (mipmaps l-mipmaps) (format l-format)) value image
+      (setf data l-data
+            width l-width
+            height l-height
+            mipmaps l-mipmaps
+            format l-format))))
+
+(defmethod translate-from-foreign (ptr (type image-type))
+  (with-foreign-slots ((data width height mipmaps format) ptr (:struct %Image))
+    (make-image :data data :width width :height height :mipmaps mipmaps :format format)))
 
 ; // Texture, tex data stored in GPU memory (VRAM)
 ; typedef struct Texture {
