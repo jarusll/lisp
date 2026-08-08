@@ -402,13 +402,18 @@
      255)))
 
 (defun rasterize()
+  (with-image (model-image "african_head_diffuse.png")
+    (with-image-colors (model-colors model-image)
   (loop for f across *backface-culled-faces*
 	for face-index of-type fixnum from 0
 	doing
-	   (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index)) f face
+	   (with-members ((v0 v0-index) (v1 v1-index) (v2 v2-index) v0-t v1-t v2-t) f face
 	     (let* ((v1 (aref *projected-vertices* v0-index))
 		    (v2 (aref *projected-vertices* v1-index))
-		    (v3 (aref *projected-vertices* v2-index)))
+		    (v3 (aref *projected-vertices* v2-index))
+		    (v0-texture (aref *vertex-textures* v0-t))
+		    (v1-texture (aref *vertex-textures* v1-t))
+		    (v2-texture (aref *vertex-textures* v2-t)))
 	       (and v1 v2 v3
 		    (with-members ((x v1-x) (y v1-y) (depth v1-depth)) v1 projected-vertex
 		      (with-members ((x v2-x) (y v2-y) (depth v2-depth)) v2 projected-vertex
@@ -446,10 +451,15 @@
 						     when (and (> captured-row-v1-to-v2 0.0f0)
 							       (> captured-row-v2-to-v3 0.0f0)
 							       (> captured-row-v3-to-v1 0.0f0))
-						       do 
+						       do
+							  (with-members ((x u0) (y v0)) v0-texture vector2
+							    (with-members ((x u1) (y v1)) v1-texture vector2
+							      (with-members ((x u2) (y v2)) v2-texture vector2
 							  (let* ((v1-weight (/ captured-row-v2-to-v3 triangle-area))
 								 (v2-weight (/ captured-row-v3-to-v1 triangle-area))
 								 (v3-weight (/ captured-row-v1-to-v2 triangle-area))
+								 (pu (+ (* v1-weight u0) (* v2-weight u1) (* v3-weight u2)))
+								 (pv (+ (* v1-weight v0) (* v2-weight v1) (* v3-weight v2)))
 								 (current-depth (+ (* v1-weight v1-depth)
 										   (* v2-weight v2-depth)
 										   (* v3-weight v3-depth)))
@@ -462,14 +472,21 @@
 								      old-depth))
 							    (when (< current-depth old-depth)
 							      (setf (aref *depthbuffer* px py) current-depth)
-							      (pixel px py +pixel+)))
+							      (pixel px py (sample-texture pu pv model-image model-colors)))))))
 						     doing
 							(incf captured-row-v1-to-v2 v1-to-v2-A)
 							(incf captured-row-v2-to-v3 v2-to-v3-A)
 							(incf captured-row-v3-to-v1 v3-to-v1-A))
 					       (incf row-v1-to-v2 v1-to-v2-B)
 					       (incf row-v2-to-v3 v2-to-v3-B)
-					       (incf row-v3-to-v1 v3-to-v1-B))))))))))))))))
+					       (incf row-v3-to-v1 v3-to-v1-B))))))))))))))))))
+
+(defun sample-texture(u v image colors)
+  (let* ((tx (floor (* u (1- (image-width image)))))
+	 (ty (floor (* (- 1.0 v) (1- (image-height image)))))
+	 (index (+ tx (* ty (image-width image)))))
+    (mem-aref colors '(:struct %color) index)))
+
 
 (defun clear-depthbuffer()
   (dotimes (y *framebuffer-height*)
