@@ -81,6 +81,9 @@
 (defparameter *backface-culled-faces*
   (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face :initial-element (make-face)))
 
+(defparameter *image* nil)
+(defparameter *colors* nil)
+
 ;; load vertices & faces from file
 (with-open-file (obj-stream "african_head.obj")
   (setf (fill-pointer *vertices*) 0)
@@ -402,8 +405,6 @@
      255)))
 
 (defun rasterize()
-  (with-image (model-image "african_head_diffuse.png")
-    (with-image-colors (model-colors model-image)
   (loop for f across *backface-culled-faces*
 	for face-index of-type fixnum from 0
 	doing
@@ -455,31 +456,31 @@
 							  (with-members ((x u0) (y v0)) v0-texture vector2
 							    (with-members ((x u1) (y v1)) v1-texture vector2
 							      (with-members ((x u2) (y v2)) v2-texture vector2
-							  (let* ((v1-weight (/ captured-row-v2-to-v3 triangle-area))
-								 (v2-weight (/ captured-row-v3-to-v1 triangle-area))
-								 (v3-weight (/ captured-row-v1-to-v2 triangle-area))
-								 (pu (+ (* v1-weight u0) (* v2-weight u1) (* v3-weight u2)))
-								 (pv (+ (* v1-weight v0) (* v2-weight v1) (* v3-weight v2)))
-								 (current-depth (+ (* v1-weight v1-depth)
-										   (* v2-weight v2-depth)
-										   (* v3-weight v3-depth)))
-								 (old-depth (aref *depthbuffer* px py)))
-							    (declare (single-float
-								      v1-weight
-								      v2-weight
-								      v3-weight
-								      current-depth
-								      old-depth))
-							    (when (< current-depth old-depth)
-							      (setf (aref *depthbuffer* px py) current-depth)
-							      (pixel px py (sample-texture pu pv model-image model-colors)))))))
+								(let* ((v1-weight (/ captured-row-v2-to-v3 triangle-area))
+								       (v2-weight (/ captured-row-v3-to-v1 triangle-area))
+								       (v3-weight (/ captured-row-v1-to-v2 triangle-area))
+								       (pu (+ (* v1-weight u0) (* v2-weight u1) (* v3-weight u2)))
+								       (pv (+ (* v1-weight v0) (* v2-weight v1) (* v3-weight v2)))
+								       (current-depth (+ (* v1-weight v1-depth)
+											 (* v2-weight v2-depth)
+											 (* v3-weight v3-depth)))
+								       (old-depth (aref *depthbuffer* px py)))
+								  (declare (single-float
+									    v1-weight
+									    v2-weight
+									    v3-weight
+									    current-depth
+									    old-depth))
+								  (when (< current-depth old-depth)
+								    (setf (aref *depthbuffer* px py) current-depth)
+								    (pixel px py (sample-texture pu pv *image* *colors*)))))))
 						     doing
 							(incf captured-row-v1-to-v2 v1-to-v2-A)
 							(incf captured-row-v2-to-v3 v2-to-v3-A)
 							(incf captured-row-v3-to-v1 v3-to-v1-A))
 					       (incf row-v1-to-v2 v1-to-v2-B)
 					       (incf row-v2-to-v3 v2-to-v3-B)
-					       (incf row-v3-to-v1 v3-to-v1-B))))))))))))))))))
+					       (incf row-v3-to-v1 v3-to-v1-B))))))))))))))))
 
 (defun sample-texture(u v image colors)
   (let* ((tx (floor (* u (1- (image-width image)))))
@@ -493,47 +494,51 @@
     (dotimes (x *framebuffer-width*)
       (setf (aref *depthbuffer* x y) 1000.0f0))))
 
-(display #'(lambda()
-	     (loop
-	       initially (clear-framebuffer)
-		 initially (clear-depthbuffer)
- 		 initially (adjust-array *projected-vertices* (length *vertices*))
- 		 initially (setf (fill-pointer *projected-vertices*) (length *vertices*))
-	       with view-matrix = (with-members(x y z) (camera-position *camera*) vector3
-				    (with-members(forward right up) (camera-basis) basis
-				      (with-members ((x fx) (y fy) (z fz)) forward vector3
-					(with-members ((x rx) (y ry) (z rz)) right vector3
-					  (with-members ((x ux) (y uy) (z uz)) up vector3
-					    (matrix*
-					     (matrix! ((fx fy fz 0)
-						       (ux uy uz 0)
-						       (rx ry rz 0)
-						       (0  0  0  1)))
-					     (translate-matrix! (- x) (- y) (- z))))))))
-	       with new-point = (make-vector3)
-	       for index from 0
-	       for point across *vertices*
-	       doing
-		  (transform-vector3-into new-point point view-matrix)
-	       doing
-		  (with-members (x y z) new-point vector3
-		    (when (> x +near-plane+)
-		      (let* ((projected-z (* (/ z x) *focal-length*))
-			     (projected-y (* (/ y x) *focal-length*))
-			     (projected-x-center (+ projected-z (/ *framebuffer-width* 2)))
-			     (projected-y-center (+ projected-y (/ *framebuffer-height* 2))))
-			;; (screen-x  (truncate projected-x-center))
-			;; (screen-y  (truncate projected-y-center)))
-			;; (pixel screen-x screen-y +pixel+)
-			(with-members ((x pjx) (y pjy) depth) (aref *projected-vertices* index) projected-vertex ; save the projection
-			  (setf pjx projected-x-center
-				pjy projected-y-center
-				depth x))))
-		    (when (<= x +near-plane+)
-		      (setf (aref *projected-vertices* index) nil))))
-	     (backface-cull)
-	     ;; (wireframe)))
-	     (rasterize)))
+(with-image (model-image "african_head_diffuse.png")
+  (with-image-colors (model-colors model-image)
+    (setf *image* model-image)
+    (setf *colors* model-colors)
+    (display #'(lambda()
+		 (loop
+		   initially (clear-framebuffer)
+		     initially (clear-depthbuffer)
+ 		     initially (adjust-array *projected-vertices* (length *vertices*))
+ 		     initially (setf (fill-pointer *projected-vertices*) (length *vertices*))
+		   with view-matrix = (with-members(x y z) (camera-position *camera*) vector3
+					(with-members(forward right up) (camera-basis) basis
+					  (with-members ((x fx) (y fy) (z fz)) forward vector3
+					    (with-members ((x rx) (y ry) (z rz)) right vector3
+					      (with-members ((x ux) (y uy) (z uz)) up vector3
+						(matrix*
+						 (matrix! ((fx fy fz 0)
+							   (ux uy uz 0)
+							   (rx ry rz 0)
+							   (0  0  0  1)))
+						 (translate-matrix! (- x) (- y) (- z))))))))
+		   with new-point = (make-vector3)
+		   for index from 0
+		   for point across *vertices*
+		   doing
+		      (transform-vector3-into new-point point view-matrix)
+		   doing
+		      (with-members (x y z) new-point vector3
+			(when (> x +near-plane+)
+			  (let* ((projected-z (* (/ z x) *focal-length*))
+				 (projected-y (* (/ y x) *focal-length*))
+				 (projected-x-center (+ projected-z (/ *framebuffer-width* 2)))
+				 (projected-y-center (+ projected-y (/ *framebuffer-height* 2))))
+			    ;; (screen-x  (truncate projected-x-center))
+			    ;; (screen-y  (truncate projected-y-center)))
+			    ;; (pixel screen-x screen-y +pixel+)
+			    (with-members ((x pjx) (y pjy) depth) (aref *projected-vertices* index) projected-vertex ; save the projection
+			      (setf pjx projected-x-center
+				    pjy projected-y-center
+				    depth x))))
+			(when (<= x +near-plane+)
+			  (setf (aref *projected-vertices* index) nil))))
+		 (backface-cull)
+		 ;; (wireframe)))
+		 (rasterize)))))
 
 ;; (%close-window)
 
