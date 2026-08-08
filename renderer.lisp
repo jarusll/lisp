@@ -6,13 +6,13 @@
 ;;           (safety 3)
 ;;           (space 0)))
 
-(setf *kernel* (make-kernel 6))
+(setf *kernel* (make-kernel 12))
 (defparameter *channel* (make-channel))
 
 (defstruct camera
-  position
-  yaw
-  pitch)
+  (position (make-vector3) :type vector3)
+  (yaw 0.0f0 :type single-float)
+  (pitch 0.0f0 :type single-float))
 
 (defstruct basis
   forward
@@ -40,31 +40,38 @@
 (defparameter +green+ (color! 0 255 0 255))
 (defparameter +blue+ (color! 0 0 255 255))
 (defparameter +world-up+ (v! 0.0 1.0 0.0))
-(defparameter *camera-speed* 5)
+(defparameter +camera-speed+ 5)
 (defparameter +near-plane+ 0.1)
 (defparameter +epsilon+ -1e-6)
 (defparameter +pixel+ (color! 0 255 0 255))
 
-(defparameter *debug-points* nil)
 (declaim (type fixnum *framebuffer-height*
                *framebuffer-width*))
 (defparameter *framebuffer-height* 600)
 (defparameter *framebuffer-width* 600)
-(defparameter *vertices* (make-array 2000 :adjustable t :fill-pointer 0))
-(defparameter *projected-vertices* (make-array 2000 :adjustable t :fill-pointer 0))
-(defparameter *faces* (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face))
-(defparameter *framebuffer* (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+))
-(defparameter *depthbuffer* (make-array (list *framebuffer-width* *framebuffer-height*)
-					:element-type 'single-float
-					:initial-element 1000.0f0))
-(defparameter *camera* (make-camera :position +camera-position-initial+
-				    :yaw 0.0
-				    :pitch 0.0))
+(defparameter *vertices*
+  (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'vector3 :initial-element (make-vector3)))
+(defparameter *projected-vertices*
+  (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'projected-vertex :initial-element (make-projected-vertex)))
+(defparameter *vertex-textures*
+  (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'vector3 :initial-element (make-vector3)))
+(defparameter *faces*
+  (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face :initial-element (make-face)))
+(defparameter *framebuffer*
+  (make-array (list *framebuffer-width* *framebuffer-height*) :initial-element +bg+ :element-type 'color))
+(defparameter *depthbuffer*
+  (make-array (list *framebuffer-width* *framebuffer-height*)
+	      :element-type 'single-float
+	      :initial-element 1000.0f0))
+(defparameter *camera*
+  (make-camera :position +camera-position-initial+
+	       :yaw 0.0
+	       :pitch 0.0))
 (defparameter *focal-length* 866.0)
 (defparameter *mouse-sensitivity* 1)
 (defparameter *camera-looking* +camera-forward-initial+)
-
-(defparameter *backface-culled-faces* (make-array 2000 :adjustable t :fill-pointer 0))
+(defparameter *backface-culled-faces*
+  (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face :initial-element (make-face)))
 
 ;; load vertices & faces from file
 (with-open-file (obj-stream "african_head.obj")
@@ -92,7 +99,13 @@
 							vertex
 							(1- (parse-integer v-vt-vn ; make faces 0 indexed
 									   :junk-allowed t)))))
-					  *faces*)))))))
+					  *faces*)))
+		   ((string= "vt " line :end1 3 :end2 3)
+		    (with-input-from-string (s (subseq line 3))
+		      (let ((x (read s))
+			    (y (read s))
+			    (z (read s)))
+			(vector-push-extend (v! x y z) *vertex-textures*))))))))
 
 ;; Preallocate projected vertices
 (adjust-array *projected-vertices* (length *vertices*))
@@ -208,7 +221,7 @@
 			       (:space :down up))
 		     (with-members (position) *camera* camera
 		       (let* ((forward-direction (camera-forward))
-			      (forward-scaled (vector-mul (* *camera-speed* dt)
+			      (forward-scaled (vector-mul (* +camera-speed+ dt)
 						       forward-direction)))
 			 (with-members ((x fx) (y fy) (z fz)) forward-scaled vector3
 			   (when forward
@@ -224,7 +237,7 @@
 				      position
 				      backward-matrix))))))
 		       (let* ((right-direction (camera-right))
-			      (right-scaled (vector-mul (* *camera-speed* dt)
+			      (right-scaled (vector-mul (* +camera-speed+ dt)
 						     right-direction)))
 			 (with-members ((x rx) (y ry) (z rz)) right-scaled vector3
 			   (when right
@@ -240,7 +253,7 @@
 				      position
 				      left-matrix))))))
 		       (let* ((up-direction +world-up+)
-			      (up-scaled (vector-mul (* *camera-speed* dt)
+			      (up-scaled (vector-mul (* +camera-speed+ dt)
 						  up-direction)))
 			 (with-members ((x ux) (y uy) (z uz)) up-scaled vector3
 			   (when up
@@ -370,6 +383,14 @@
     (setf x (logxor x (ash x -16)))
     (setf x (* x #x45d9f3b))
     (logxor x (ash x -16))))
+
+(defun random-color (seed)
+  (let ((h (hash32 seed)))
+    (color!
+     (ldb (byte 8  0) h)
+     (ldb (byte 8  8) h)
+     (ldb (byte 8 16) h)
+     255)))
 
 (defun rasterize()
   (loop for f across *backface-culled-faces*
