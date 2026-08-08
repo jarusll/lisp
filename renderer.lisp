@@ -35,7 +35,9 @@
 (defstruct projected-vertex
   (x 0.0 :type single-float)
   (y 0.0 :type single-float)
-  (depth 1000.0f0 :type single-float))
+  (depth 1000.0f0 :type single-float)
+  (u 0.0 :type single-float)
+  (v 0.0 :type single-float))
   
 (defparameter +camera-forward-initial+ (v! 1.0 0.0 0.0))
 (defparameter +camera-right-initial+ (v! 0.0 0.0 1.0))
@@ -60,7 +62,7 @@
 (defparameter *projected-vertices*
   (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'projected-vertex :initial-element (make-projected-vertex)))
 (defparameter *vertex-textures*
-  (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'vector3 :initial-element (make-vector3)))
+  (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'vector2 :initial-element (make-vector2)))
 (defparameter *faces*
   (make-array 2000 :adjustable t :fill-pointer 0 :element-type 'face :initial-element (make-face)))
 (defparameter *framebuffer*
@@ -112,9 +114,8 @@
 		   ((string= "vt " line :end1 3 :end2 3)
 		    (with-input-from-string (s (subseq line 3))
 		      (let ((x (read s))
-			    (y (read s))
-			    (z (read s)))
-			(vector-push-extend (v! x y z) *vertex-textures*))))))))
+			    (y (read s)))
+			(vector-push-extend (v! x y) *vertex-textures*))))))))
 
 ;; Preallocate projected vertices
 (adjust-array *projected-vertices* (length *vertices*))
